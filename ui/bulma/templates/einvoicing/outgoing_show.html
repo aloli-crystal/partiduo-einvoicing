@@ -1,0 +1,27 @@
+{# SPDX-License-Identifier: AGPL-3.0-or-later. Facture électronique émise : statut, route, transmission, fichiers produits à la demande (Factur-X, CII, EXTENDED-CTC-FR, UBL, PEPPOL), événements du cycle de vie. #}{% extend "ui/base.html" %}
+{% block title %}{{ title }}{% endblock title %}
+{% block crumbs %}{% include "ui/_crumbs.html" %}{% endblock crumbs %}
+{% block heading %}{{ title }}{% endblock heading %}
+{% block actions %}{% if can_transmit %}<form method="post" action="{{ row.transmit_url }}">{% csrf_input %}<button class="button is-primary pd-touch" type="submit">{% include "ui/_icon.html" with name="send" %}<span>{% translate "einvoicing_ui.actions.transmit" %}</span></button></form>{% endif %}{% endblock actions %}
+{% block content %}
+{% if row.platform_required %}<div class="notification is-danger is-light pd-alert" role="alert" data-einv-required>{% include "ui/_icon.html" with name="triangle-alert" %}<div><p>{% translate "einvoicing_ui.outgoing.platform_required" %}</p></div></div>{% endif %}
+{% if row.error %}<div class="notification is-danger is-light pd-alert" role="alert">{% include "ui/_icon.html" with name="triangle-alert" %}<div><p>{{ row.error }}</p></div></div>{% endif %}
+<section class="pd-panel" aria-labelledby="pd-einv-out-status">
+  <header><h2 id="pd-einv-out-status">{% translate "einvoicing_ui.outgoing.status" %}</h2><span class="tag {{ row.tone }} is-light" data-einv-status="{{ row.status }}">{{ row.status_label }}</span></header>
+  <div class="pd-body"><dl class="pd-einv-dl">
+    <dt>{% translate "einvoicing_ui.outgoing.number" %}</dt><dd class="pd-mono">{% if row.invoice_url %}<a href="{{ row.invoice_url }}">{{ row.number }}</a>{% else %}{{ row.number }}{% endif %} · {{ row.kind }}</dd>
+    <dt>{% translate "einvoicing_ui.outgoing.customer" %}</dt><dd>{{ row.customer }} ({{ row.country }})</dd>
+    <dt>{% translate "einvoicing_ui.outgoing.date" %}</dt><dd>{{ row.date }}</dd>
+    <dt>{% translate "einvoicing_ui.outgoing.total" %}</dt><dd>{{ row.total }}</dd>
+    <dt>{% translate "einvoicing_ui.outgoing.route" %}</dt><dd>{{ row.route_label }}</dd>
+    {% if row.submitted_at %}<dt>{% translate "einvoicing_ui.outgoing.submitted" %}</dt><dd>{{ row.submitted_at }} · {{ row.adapter }} · {{ row.syntax }}</dd>{% endif %}
+    {% if row.platform_ref %}<dt>{% translate "einvoicing_ui.outgoing.platform_ref" %}</dt><dd class="pd-mono">{{ row.platform_ref }}</dd>{% endif %}
+    <dt>{% translate "einvoicing_ui.outgoing.tracking" %}</dt><dd class="pd-mono">{{ row.tracking_id }}</dd>
+  </dl></div>
+</section>
+{% if formats %}<section class="pd-panel" aria-labelledby="pd-einv-out-files">
+  <header><h2 id="pd-einv-out-files">{% translate "einvoicing_ui.outgoing.files" %}</h2></header>
+  <div class="pd-body"><div class="buttons">{% for format in formats %}<a class="button is-small pd-touch" href="{{ format.url }}">{% include "ui/_icon.html" with name="download" %}<span>{{ format.label }}</span></a>{% endfor %}</div></div>
+</section>{% endif %}
+{% include "einvoicing/_events.html" %}
+{% endblock content %}

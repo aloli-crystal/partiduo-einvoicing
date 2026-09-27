@@ -1,0 +1,1 @@
+{# SPDX-License-Identifier: AGPL-3.0-or-later. Onglets de statut d'une liste (variable tabs). #}<nav class="pd-tabs" aria-label="{% translate 'einvoicing_ui.tabs.label' %}">{% for tab in tabs %}<a href="{{ tab.url }}"{% if tab.current %} aria-current="page"{% endif %}>{{ tab.label }}</a>{% endfor %}</nav>

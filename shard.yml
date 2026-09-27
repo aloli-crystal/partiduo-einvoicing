@@ -1,0 +1,43 @@
+name: partiduo-einvoicing
+version: 0.1.0
+
+description: |
+  Extension EINV de Partiduo : facturation électronique (réforme française
+  et PEPPOL belge), successeur de peppol-connect de NOALYSS. Connecteur de
+  plateforme agréée abstrait (XP Z12-013, NOALYSS-PEPPOL), émission des
+  factures Factur-X du module Facturation, réception (UBL, CII, Factur-X)
+  dans la boîte « Justificatifs à traiter », cycle de vie et e-reporting
+  (ADR-004, ADR-003).
+
+authors:
+  - Philippe Nénert <it+claude.ai@aloli.fr>
+
+crystal: ">= 1.19.1"
+
+license: AGPL-3.0-or-later
+
+targets:
+  partiduo-einvoicing-manage:
+    main: manage.cr
+
+dependencies:
+  # Le cœur : registre, événements, pièces jointes et contrat Partiduo::Api.
+  partiduo:
+    path: ../partiduo-app
+  # La boîte « Justificatifs à traiter » (Document::Api.receive).
+  partiduo-document:
+    path: ../partiduo-document
+  marten:
+    path: ../../marten
+  # Lecture des fichiers embarqués d'un PDF/A-3 Factur-X.
+  pdf:
+    path: ../../pdf
+
+development_dependencies:
+  # L'interface qui monte ui/bulma/ : nécessaire aux specs et à manage.cr ;
+  # la distribution l'apporte elle-même.
+  partiduo-ui-bulma:
+    path: ../partiduo-ui-bulma
+  ameba:
+    github: crystal-ameba/ameba
+    version: "~> 1.6"

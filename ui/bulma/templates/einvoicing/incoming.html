@@ -1,0 +1,50 @@
+{# SPDX-License-Identifier: AGPL-3.0-or-later. Factures électroniques reçues : onglets par statut, synchronisation, dépôt manuel d'un fichier UBL, CII ou Factur-X. Les factures reçues entrent aussi dans la boîte « Justificatifs à traiter » (DOCUMENT). #}{% extend "ui/base.html" %}
+{% block title %}{{ title }}{% endblock title %}
+{% block crumbs %}{% include "ui/_crumbs.html" %}{% endblock crumbs %}
+{% block heading %}{{ title }} <span class="pd-ext">EINV</span>{% endblock heading %}
+{% block content %}
+{% include "einvoicing/_connection.html" %}
+{% if errors %}<div class="notification is-danger is-light pd-alert" role="alert">{% include "ui/_icon.html" with name="triangle-alert" %}<div>{% for message in errors %}<p>{{ message }}</p>{% endfor %}</div></div>{% endif %}
+{% include "einvoicing/_tabs.html" %}
+<section class="pd-panel" aria-labelledby="pd-einv-in-title">
+  <header>
+    <h2 id="pd-einv-in-title">{% translate "einvoicing_ui.incoming.list" %}</h2>
+    <form method="get" action="{% url 'einv:incoming' %}" class="pd-einv-search" role="search">
+      <input type="hidden" name="status" value="{{ status }}">
+      <label class="is-sr-only" for="pd-einv-q">{% translate "einvoicing_ui.incoming.search" %}</label>
+      <input class="input is-small" type="search" id="pd-einv-q" name="q" value="{{ search }}" placeholder="{% translate 'einvoicing_ui.incoming.search' %}">
+      <button class="button is-small" type="submit">{% include "ui/_icon.html" with name="search" %}<span class="is-sr-only">{% translate "einvoicing_ui.incoming.search" %}</span></button>
+    </form>
+  </header>
+  {% if rows %}
+  <div class="pd-scroll"><table class="table is-fullwidth is-hoverable">
+    <caption class="is-sr-only">{% translate "einvoicing_ui.incoming.list" %}</caption>
+    <thead><tr><th scope="col">{% translate "einvoicing_ui.incoming.supplier" %}</th><th scope="col">{% translate "einvoicing_ui.incoming.number" %}</th><th scope="col" class="pd-hide-s">{% translate "einvoicing_ui.incoming.date" %}</th><th scope="col" class="amount">{% translate "einvoicing_ui.incoming.total" %}</th><th scope="col" class="pd-hide-s">{% translate "einvoicing_ui.incoming.format" %}</th><th scope="col">{% translate "einvoicing_ui.incoming.status" %}</th></tr></thead>
+    <tbody>{% for row in rows %}<tr data-einv-reception="{{ row.id }}">
+      <td><a href="{{ row.show_url }}">{{ row.supplier }}</a>{% if row.siren %} <span class="pd-muted is-size-7 pd-mono">{{ row.siren }}</span>{% endif %}</td>
+      <td class="pd-mono">{{ row.number }}{% if row.credit %} <span class="tag is-light">{% translate "einvoicing_ui.incoming.credit_note" %}</span>{% endif %}</td>
+      <td class="pd-hide-s pd-mono">{{ row.date }}</td>
+      <td class="amount">{% if row.total %}{{ row.total }}{% else %}—{% endif %}</td>
+      <td class="pd-hide-s">{{ row.syntax }}</td>
+      <td><span class="tag {{ row.tone }} is-light" data-einv-status="{{ row.status }}">{{ row.status_label }}</span></td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}
+  <div class="pd-body"><p class="pd-muted">{% translate "einvoicing_ui.incoming.empty" %}</p></div>
+  {% endif %}
+</section>
+{% if can_import %}
+<section class="pd-panel" aria-labelledby="pd-einv-import-title">
+  <header><h2 id="pd-einv-import-title">{% translate "einvoicing_ui.incoming.import_title" %}</h2></header>
+  <div class="pd-body">
+    <form method="post" action="{% url 'einv:import' %}" enctype="multipart/form-data">
+      {% csrf_input %}
+      <div class="field"><label class="label" for="pd-einv-file">{% translate "einvoicing_ui.incoming.import_file" %}</label>
+        <input class="input" type="file" id="pd-einv-file" name="file" accept=".xml,application/xml,application/pdf" aria-describedby="pd-einv-file-help">
+        <p class="help" id="pd-einv-file-help">{% translate "einvoicing_ui.incoming.import_help" %}</p></div>
+      <button class="button is-primary pd-touch" type="submit">{% include "ui/_icon.html" with name="upload" %}<span>{% translate "einvoicing_ui.actions.import" %}</span></button>
+    </form>
+  </div>
+</section>
+{% endif %}
+{% endblock content %}

@@ -1,0 +1,36 @@
+{# SPDX-License-Identifier: AGPL-3.0-or-later. Factures électroniques émises : onglets par statut, route (plateforme, B2C, international, hors plateforme), statut du cycle de vie ; les factures que la réforme impose de transmettre sont signalées, jamais bloquées (ADR-004 D9). #}{% extend "ui/base.html" %}
+{% block title %}{{ title }}{% endblock title %}
+{% block crumbs %}{% include "ui/_crumbs.html" %}{% endblock crumbs %}
+{% block heading %}{{ title }} <span class="pd-ext">EINV</span>{% endblock heading %}
+{% block content %}
+{% include "einvoicing/_connection.html" %}
+{% include "einvoicing/_tabs.html" %}
+<section class="pd-panel" aria-labelledby="pd-einv-out-title">
+  <header>
+    <h2 id="pd-einv-out-title">{% translate "einvoicing_ui.outgoing.list" %}</h2>
+    <form method="get" action="{% url 'einv:outgoing' %}" class="pd-einv-search" role="search">
+      <input type="hidden" name="status" value="{{ status }}">
+      <label class="is-sr-only" for="pd-einv-q">{% translate "einvoicing_ui.outgoing.search" %}</label>
+      <input class="input is-small" type="search" id="pd-einv-q" name="q" value="{{ search }}" placeholder="{% translate 'einvoicing_ui.outgoing.search' %}">
+      <button class="button is-small" type="submit">{% include "ui/_icon.html" with name="search" %}<span class="is-sr-only">{% translate "einvoicing_ui.outgoing.search" %}</span></button>
+    </form>
+  </header>
+  {% if rows %}
+  <div class="pd-scroll"><table class="table is-fullwidth is-hoverable">
+    <caption class="is-sr-only">{% translate "einvoicing_ui.outgoing.list" %}</caption>
+    <thead><tr><th scope="col">{% translate "einvoicing_ui.outgoing.number" %}</th><th scope="col">{% translate "einvoicing_ui.outgoing.customer" %}</th><th scope="col" class="pd-hide-s">{% translate "einvoicing_ui.outgoing.date" %}</th><th scope="col" class="amount">{% translate "einvoicing_ui.outgoing.total" %}</th><th scope="col" class="pd-hide-s">{% translate "einvoicing_ui.outgoing.route" %}</th><th scope="col">{% translate "einvoicing_ui.outgoing.status" %}</th></tr></thead>
+    <tbody>{% for row in rows %}<tr data-einv-transmission="{{ row.number }}">
+      <td class="pd-mono"><a href="{{ row.show_url }}">{{ row.number }}</a> <span class="pd-muted is-size-7">{{ row.kind }}</span></td>
+      <td>{{ row.customer }}{% if row.platform_required %} <span class="tag is-danger is-light" title="{% translate 'einvoicing_ui.outgoing.platform_required' %}" data-einv-required>{% translate "einvoicing_ui.outgoing.required_tag" %}</span>{% endif %}</td>
+      <td class="pd-hide-s pd-mono">{{ row.date }}</td>
+      <td class="amount">{{ row.total }}</td>
+      <td class="pd-hide-s">{{ row.route_label }}</td>
+      <td><span class="tag {{ row.tone }} is-light" data-einv-status="{{ row.status }}">{{ row.status_label }}</span></td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}
+  <div class="pd-body"><p class="pd-muted">{% translate "einvoicing_ui.outgoing.empty" %}</p></div>
+  {% endif %}
+</section>
+<p class="is-size-7 pd-muted">{% translate "einvoicing_ui.outgoing.note" %}</p>
+{% endblock content %}

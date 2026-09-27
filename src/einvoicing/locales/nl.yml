@@ -1,0 +1,124 @@
+nl:
+  einvoicing:
+    module:
+      name: "Elektronische facturatie"
+    permissions:
+      invoice:
+        read: "Elektronische facturen raadplegen"
+        send: "Facturen naar het erkende platform verzenden"
+        receive: "Ontvangen facturen verwerken (aanvaarden, weigeren, voorboeken)"
+      settings:
+        manage: "Het erkende platform koppelen"
+    menu:
+      outgoing: "Verzonden elektronische facturen"
+      incoming: "Ontvangen elektronische facturen"
+      directory: "Adresboek elektronische facturatie"
+      settings: "Erkend platform"
+    adapters:
+      afnor: "Genormaliseerde API XP Z12-013 (elk erkend platform)"
+      noalyss_peppol: "Toegangspunt NOALYSS-PEPPOL (Belgische dossiers)"
+      unknown: "Adapter ontbreekt in deze distributie"
+    fields:
+      flow_url: "Adres van de Flow-API"
+      directory_url: "Adres van de adresboek-API"
+      token_url: "Adres voor het OAuth-token"
+      client_id: "Client-ID (client_id)"
+      client_secret: "Clientgeheim (client_secret)"
+      organization_id: "Organisatie (Organization-Id)"
+      environment: "Omgeving"
+      url: "Adres van het toegangspunt"
+      participant_id: "PEPPOL-deelnemers-ID"
+      user_id: "Gebruikers-ID"
+      token: "Toegangstoken"
+    modes:
+      sandbox: "Testomgeving"
+      production: "Productie"
+    routes:
+      platform: "Erkend platform"
+      b2c: "Particulier (e-reporting)"
+      international: "Internationaal (e-reporting)"
+      off_platform: "Buiten het platform"
+    transmission_statuses:
+      pending: "Te verzenden"
+      submitted: "Verzonden"
+      deposited: "Ingediend"
+      rejected: "Afgewezen"
+      refused: "Geweigerd"
+      approved: "Goedgekeurd"
+      paid: "Geïnd"
+      ereporting: "E-reporting"
+      off_platform: "Buiten het platform"
+    reception_statuses:
+      received: "Te verwerken"
+      accepted: "Aanvaard"
+      refused: "Geweigerd"
+      posted: "Voorgeboekt"
+    codes:
+      "200": "Ingediend"
+      "201": "Uitgegeven door het platform"
+      "202": "Ontvangen door het platform"
+      "203": "Ter beschikking gesteld"
+      "204": "In behandeling"
+      "205": "Goedgekeurd"
+      "206": "Gedeeltelijk goedgekeurd"
+      "207": "Betwist"
+      "208": "Opgeschort"
+      "209": "Aangevuld"
+      "210": "Geweigerd"
+      "211": "Betaling doorgegeven"
+      "212": "Geïnd"
+      "213": "Afgewezen"
+      "214": "Geviseerd"
+      "220": "Geannuleerd"
+    issuers:
+      platform: "Platform"
+      seller: "Verkoper"
+      buyer: "Koper"
+    event_states:
+      received: "Ontvangen"
+      to_send: "Te verzenden"
+      sent: "Verzonden"
+      failed: "Mislukt, nieuwe poging"
+      not_applicable: "Niet van toepassing voor dit platform"
+    refusal_reasons:
+      DOUBLON: "Dubbele factuur"
+      DEST_ERR: "Verkeerde bestemmeling"
+      MONTANTTOTAL_ERR: "Verkeerd totaalbedrag"
+      TX_TVA_ERR: "Verkeerd btw-tarief"
+      CMD_ERR: "Verkeerde bestelreferentie"
+      LIVR_INCOMP: "Onvolledige levering"
+      NON_CONFORME: "Niet-conforme factuur"
+      AUTRE: "Andere reden"
+    receipt_note: "Ontvangen elektronische factuur (%{syntax})"
+    errors:
+      connection:
+        adapter:
+          unknown: "Onbekende adapter: %{value}."
+          regime: "Adapter %{adapter} is niet toegelaten voor een dossier met stelsel %{regime}."
+        field:
+          blank: "Deze parameter is verplicht."
+          https: "HTTPS-adres verwacht: %{value}."
+          choice: "Waarde niet toegelaten: %{value}."
+          too_long: "Hoogstens %{max} tekens."
+        failed: "Het platform antwoordt niet zoals verwacht: %{detail}"
+        missing: "Er is geen erkend platform gekoppeld."
+      transmission:
+        not_issued: "Dit document is geen uitgegeven factuur."
+        not_transmittable: "Deze factuur kan in haar huidige toestand niet worden verzonden (%{status})."
+        failed: "Verzending mislukt: %{detail}"
+      reception:
+        unreadable: "Noch UBL, noch CII, noch Factur-X: bestand niet herkend."
+        reason_code: "Onbekende weigeringsreden: %{value}."
+        reason_blank: "Vermeld de reden van de weigering."
+        reason_too_long: "Hoogstens %{max} tekens."
+        account_missing: "Aankoopdagboek %{ledger} heeft geen standaard kostenrekening: vul ze in bij de instellingen van het dagboek."
+        no_purchase_ledger: "Geen aankoopdagboek waarin u mag boeken."
+        supplier_unknown: "Geen leveranciersfiche voor %{name} (SIREN %{siren}): maak ze aan vóór het voorboeken."
+        number_missing: "De ontvangen factuur heeft geen nummer."
+        no_file: "Het bestand van de ontvangen factuur is niet gevonden."
+        status:
+          not_received: "Deze factuur is al verwerkt (%{status})."
+          already_decided: "Deze factuur is al verwerkt (%{status})."
+      directory:
+        too_short: "Typ minstens drie tekens."
+        unsupported: "Het gekoppelde platform biedt geen adresboek."

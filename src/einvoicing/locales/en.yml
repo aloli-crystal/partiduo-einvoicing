@@ -1,0 +1,124 @@
+en:
+  einvoicing:
+    module:
+      name: "E-invoicing"
+    permissions:
+      invoice:
+        read: "View e-invoices"
+        send: "Send invoices to the accredited platform"
+        receive: "Process received invoices (accept, refuse, pre-post)"
+      settings:
+        manage: "Connect the accredited platform"
+    menu:
+      outgoing: "Sent e-invoices"
+      incoming: "Received e-invoices"
+      directory: "E-invoicing directory"
+      settings: "Accredited platform"
+    adapters:
+      afnor: "XP Z12-013 standard API (any accredited platform)"
+      noalyss_peppol: "NOALYSS-PEPPOL access point (Belgian books)"
+      unknown: "Adapter not included in this distribution"
+    fields:
+      flow_url: "Flow API address"
+      directory_url: "Directory API address"
+      token_url: "OAuth token address"
+      client_id: "Client identifier (client_id)"
+      client_secret: "Client secret (client_secret)"
+      organization_id: "Organization (Organization-Id)"
+      environment: "Environment"
+      url: "Access point address"
+      participant_id: "PEPPOL participant identifier"
+      user_id: "User identifier"
+      token: "Access token"
+    modes:
+      sandbox: "Sandbox"
+      production: "Production"
+    routes:
+      platform: "Accredited platform"
+      b2c: "Consumer (e-reporting)"
+      international: "International (e-reporting)"
+      off_platform: "Outside the platform"
+    transmission_statuses:
+      pending: "To send"
+      submitted: "Sent"
+      deposited: "Submitted"
+      rejected: "Rejected"
+      refused: "Refused"
+      approved: "Approved"
+      paid: "Paid"
+      ereporting: "E-reporting"
+      off_platform: "Outside the platform"
+    reception_statuses:
+      received: "To process"
+      accepted: "Accepted"
+      refused: "Refused"
+      posted: "Pre-posted"
+    codes:
+      "200": "Submitted"
+      "201": "Issued by the platform"
+      "202": "Received by the platform"
+      "203": "Made available"
+      "204": "In hand"
+      "205": "Approved"
+      "206": "Partially approved"
+      "207": "Disputed"
+      "208": "Suspended"
+      "209": "Completed"
+      "210": "Refused"
+      "211": "Payment sent"
+      "212": "Paid"
+      "213": "Rejected"
+      "214": "Endorsed"
+      "220": "Cancelled"
+    issuers:
+      platform: "Platform"
+      seller: "Seller"
+      buyer: "Buyer"
+    event_states:
+      received: "Received"
+      to_send: "To send"
+      sent: "Sent"
+      failed: "Failed, will retry"
+      not_applicable: "Not applicable to this platform"
+    refusal_reasons:
+      DOUBLON: "Duplicate invoice"
+      DEST_ERR: "Wrong recipient"
+      MONTANTTOTAL_ERR: "Wrong total amount"
+      TX_TVA_ERR: "Wrong VAT rate"
+      CMD_ERR: "Wrong order reference"
+      LIVR_INCOMP: "Incomplete delivery"
+      NON_CONFORME: "Non-compliant invoice"
+      AUTRE: "Other reason"
+    receipt_note: "Received e-invoice (%{syntax})"
+    errors:
+      connection:
+        adapter:
+          unknown: "Unknown adapter: %{value}."
+          regime: "Adapter %{adapter} is not allowed for %{regime} books."
+        field:
+          blank: "This setting is required."
+          https: "HTTPS address expected: %{value}."
+          choice: "Value not allowed: %{value}."
+          too_long: "%{max} characters at most."
+        failed: "The platform did not answer as expected: %{detail}"
+        missing: "No accredited platform is connected."
+      transmission:
+        not_issued: "This document is not an issued invoice."
+        not_transmittable: "This invoice cannot be sent in its current state (%{status})."
+        failed: "Sending failed: %{detail}"
+      reception:
+        unreadable: "Neither UBL, CII nor Factur-X: file not recognised."
+        reason_code: "Unknown refusal reason: %{value}."
+        reason_blank: "Please state the refusal reason."
+        reason_too_long: "%{max} characters at most."
+        account_missing: "Purchase ledger %{ledger} has no default expense account: set it in the ledger settings."
+        no_purchase_ledger: "No purchase ledger you can post to."
+        supplier_unknown: "No supplier card for %{name} (SIREN %{siren}): create it before pre-posting."
+        number_missing: "The received invoice has no number."
+        no_file: "The received invoice file cannot be found."
+        status:
+          not_received: "This invoice has already been processed (%{status})."
+          already_decided: "This invoice has already been processed (%{status})."
+      directory:
+        too_short: "Type at least three characters."
+        unsupported: "The connected platform offers no directory."

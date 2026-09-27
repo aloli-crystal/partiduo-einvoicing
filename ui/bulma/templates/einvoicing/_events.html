@@ -1,0 +1,12 @@
+{# SPDX-License-Identifier: AGPL-3.0-or-later. Événements du cycle de vie d'une facture (ADR-004 D4) : code AFNOR, date, émetteur, motif, montant, état d'émission. #}<section class="pd-panel" aria-labelledby="pd-einv-events-title">
+  <header><h2 id="pd-einv-events-title">{% translate "einvoicing_ui.events.title" %}</h2></header>
+  {% if events %}
+  <div class="pd-scroll"><table class="table is-fullwidth" data-einv-events>
+    <caption class="is-sr-only">{% translate "einvoicing_ui.events.title" %}</caption>
+    <thead><tr><th scope="col">{% translate "einvoicing_ui.events.code" %}</th><th scope="col">{% translate "einvoicing_ui.events.date" %}</th><th scope="col">{% translate "einvoicing_ui.events.issuer" %}</th><th scope="col">{% translate "einvoicing_ui.events.reason" %}</th><th scope="col" class="amount">{% translate "einvoicing_ui.events.amount" %}</th><th scope="col">{% translate "einvoicing_ui.events.state" %}</th></tr></thead>
+    <tbody>{% for event in events %}<tr data-einv-event="{{ event.code }}"><td><span class="pd-mono">{{ event.code }}</span> {{ event.label }}</td><td class="pd-mono">{{ event.date }}</td><td>{{ event.issuer }}</td><td>{% if event.reason %}{{ event.reason }}{% else %}—{% endif %}</td><td class="amount">{% if event.amount %}{{ event.amount }}{% else %}—{% endif %}</td><td>{{ event.state }}{% if event.error %} <span class="pd-muted is-size-7">({{ event.error }})</span>{% endif %}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}
+  <div class="pd-body"><p class="pd-muted">{% translate "einvoicing_ui.events.none" %}</p></div>
+  {% endif %}
+</section>

@@ -1,0 +1,139 @@
+= partiduo-einvoicing — facturation électronique
+:toc: left
+:toc-title: Table des matières
+:icons: font
+
+*Partiduo* est le portage en Crystal de https://noalyss.eu[NOALYSS], logiciel
+libre de comptabilité créé et maintenu par *Dany De Bontridder*. Partiduo
+n'est pas un projet officiel NOALYSS.
+
+Ce dépôt est l'extension `EINV` de Partiduo : la facturation électronique de
+la réforme française (émission, réception, cycle de vie, e-reporting) par une
+*plateforme agréée*, et le point d'accès PEPPOL de NOALYSS pour les dossiers
+belges. Elle remplace le portage à l'identique de l'extension
+`peppol-connect` de NOALYSS (ADR-004).
+
+La spécification est dans `../partiduo-docs/` : ADR-004 (facturation
+électronique, D1 à D9), ADR-003 (contrat d'extension), ADR-005 D4
+(interface d'une extension), ADR-006 D3 et D5 (modules et Facturation). Les
+décisions propres à ce dépôt sont consignées dans
+`../partiduo-app/DECISIONS.adoc` (préfixe `D-EINV-`), les blocages dans
+`../partiduo-app/BLOCAGES.adoc` (`B-EINV-`). Référence du contrat :
+link:doc/api/einvoicing.adoc[].
+
+== Fonctions
+
+[cols="1,3",options="header"]
+|===
+|Fonction |Dans EINV
+
+|Connecteur
+|`Einvoicing::Connector` abstrait (ADR-004 D2) : dépôt, réception et statuts
+lus *par curseur*, page après page, statuts émis, e-reporting, annuaire. Un
+seul adaptateur actif par dossier ; paramètres, secrets et jetons (OAuth,
+session) *chiffrés en base* ; TLS toujours vérifié.
+
+|Adaptateurs
+|*XP Z12-013* (API Flux et API Annuaire normalisées AFNOR, OAuth 2 client
+credentials ; toute plateforme agréée qui les implémente, SuperPDP compris)
+et *NOALYSS-PEPPOL* (reprise de `peppol-connect`, dossiers belges). Une
+extension `partiduo-<pa>` ajoute le sien par
+`Einvoicing::Connections.register` (ADR-004 D6, D8).
+
+|Émission
+|Chaque facture, acompte ou avoir émis par le module Facturation est relevé
+à `invoice.issued` / `credit_note.issued`, avec sa voie : plateforme (B2B),
+particulier (B2C, e-reporting par la note `BAR`), international
+(e-reporting), hors plateforme — signalée quand la réforme impose la
+plateforme, jamais bloquée (ADR-004 D9). Le fichier transmis est le PDF/A-3
+Factur-X produit par la Facturation ; à la demande : CII EN 16931,
+EXTENDED-CTC-FR, UBL 2.1 EN 16931, UBL PEPPOL BIS 3. SIREN en schéma `0002`,
+adresse électronique `0225` (ou `0208` en Belgique).
+
+|Réception
+|Lecture UBL, CII et Factur-X (XML extrait du PDF/A-3), dépôt dans la boîte
+« Justificatifs à traiter » de `partiduo-document` (`Document::Api.receive`,
+pièces jointes du socle), fiche du fournisseur reconnue par le SIREN ou le
+numéro de TVA, doublons (y compris les factures reçues hors plateforme,
+ADR-004 D9), accepter, refuser (statut 210 émis avec son motif),
+pré-comptabiliser dans le journal d'achats par le service d'écriture du cœur
+(`post_received_invoice`, Comptabilité active).
+
+|Cycle de vie
+|Table `einvoicing_lifecycle_event` (code AFNOR, date, motif, émetteur) :
+Déposée (200) et Rejetée (213) remontées de la plateforme, statuts du
+destinataire (CDAR), Refusée (210) émise à la réception, Encaissée (212)
+émise automatiquement au lettrage (`payment.matched`) ou à l'encaissement
+saisi (`payment.recorded`).
+
+|Interface
+|`ui/bulma/`, montée sous `/ext/EINV/` : factures émises (statuts,
+transmission, fichiers), factures reçues (accepter, refuser,
+pré-comptabiliser, dépôt manuel), raccordement de la plateforme (mode bac à
+sable ou production toujours affiché), annuaire ; compteurs du menu et du
+tableau de bord.
+|===
+
+Fonctionnement selon les modules actifs : la réception fonctionne sur le
+socle et DOCUMENT seuls ; l'émission exige la Facturation ; la
+pré-comptabilisation, la Comptabilité (DECISIONS D-EINV-002).
+
+== Organisation
+
+[source]
+----
+src/partiduo-einvoicing.cr        # point d'entrée du shard (métier, sans interface)
+src/partiduo-einvoicing/cli.cr    # migrations pour la ligne de commande
+src/einvoicing/
+├── app.cr, manifest.cr           # application Marten `einvoicing`, manifeste EINV
+├── connector.cr, http.cr         # connecteur abstrait, transport HTTP (TLS vérifié)
+├── connectors/                   # adaptateurs AFNOR (XP Z12-013), NOALYSS_PEPPOL
+├── formats/                      # lecture UBL/CII/Factur-X, UBL, variantes CII, CDAR, e-reporting
+├── models/, migrations/          # tables einvoicing_*
+├── services/                     # règles internes (émission, réception, cycle de vie…)
+├── api/                          # contrat public Einvoicing::Api
+└── locales/                      # fr, en, nl
+ui/bulma/                         # interface Bulma (Einvoicing::Ui), ADR-005 D4
+spec/support/platform.cr          # plateforme agréée simulée
+----
+
+== Composition dans une distribution
+
+[source,crystal]
+----
+require "partiduo-ui-bulma/partiduo_ui"
+require "partiduo-einvoicing"
+require "partiduo-document/ui/bulma"
+require "partiduo-einvoicing/ui/bulma"
+
+Marten.configure do |config|
+  config.installed_apps = config.installed_apps + Document::INSTALLED_APPS + Document::Ui::INSTALLED_APPS +
+                          Einvoicing::INSTALLED_APPS + Einvoicing::Ui::INSTALLED_APPS
+end
+----
+
+Clé de chiffrement des secrets : `PARTIDUO_EINVOICING_KEY` (64 caractères
+hexadécimaux), sinon dérivée de `MARTEN_SECRET_KEY`. La synchronisation se
+lance par le bouton « Synchroniser » des écrans ou par
+`Einvoicing::Api.synchronize(Partiduo::Api::Actor.system)` depuis une tâche
+planifiée.
+
+== Commandes
+
+[source,sh]
+----
+cd prod-crystal/partiduo/partiduo-einvoicing
+SKIP_MARTEN_CLI_PRECOMPILATION=1 shards install
+createdb --encoding=UTF8 partiduo_test_<agent>
+DATABASE_URL='postgres:///partiduo_test_<agent>?host=/tmp' crystal spec
+crystal run manage.cr -- genmigrations einvoicing   # modèles et migrations alignés
+crystal tool format src spec ui config scripts manage.cr && bin/ameba
+----
+
+Les specs tournent contre une plateforme agréée simulée
+(`spec/support/platform.cr`) qui reproduit les réponses documentées des API
+XP Z12-013 1.3.0 et NOALYSS-PEPPOL ; aucune n'appelle le réseau.
+
+== Licence
+
+GNU Affero General Public License v3 ou ultérieure (voir `LICENSE`).

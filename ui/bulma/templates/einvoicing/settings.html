@@ -1,0 +1,34 @@
+{# SPDX-License-Identifier: AGPL-3.0-or-later. Raccordement de la plateforme agréée : un seul adaptateur actif (ADR-004 D2) ; mode bac à sable ou production affiché en permanence (ADR-004 D8) ; secrets chiffrés en base, jamais réaffichés (un champ secret laissé vide garde la valeur enregistrée). #}{% extend "ui/base.html" %}
+{% block title %}{{ title }}{% endblock title %}
+{% block crumbs %}{% include "ui/_crumbs.html" %}{% endblock crumbs %}
+{% block heading %}{{ title }} <span class="pd-ext">EINV</span>{% endblock heading %}
+{% block content %}
+{% include "einvoicing/_connection.html" %}
+{% if connection %}<div class="buttons">
+  <form method="post" action="{% url 'einv:settings_check' %}">{% csrf_input %}<button class="button pd-touch" type="submit">{% include "ui/_icon.html" with name="plug" %}<span>{% translate "einvoicing_ui.actions.check" %}</span></button></form>
+  <form method="post" action="{% url 'einv:settings_disconnect' %}">{% csrf_input %}<button class="button is-danger is-light pd-touch" type="submit">{% translate "einvoicing_ui.actions.disconnect" %}</button></form>
+</div>{% endif %}
+{% if base %}<div class="notification is-danger is-light pd-alert" role="alert">{% include "ui/_icon.html" with name="triangle-alert" %}<div><p>{{ base }}</p></div></div>{% endif %}
+{% for adapter in adapters %}
+<section class="pd-panel" aria-labelledby="pd-einv-adapter-{{ adapter.code }}" data-einv-adapter="{{ adapter.code }}">
+  <header><h2 id="pd-einv-adapter-{{ adapter.code }}">{{ adapter.label }}</h2>{% if adapter.active %}<span class="tag is-success is-light">{% translate "einvoicing_ui.settings.active" %}</span>{% endif %}</header>
+  <div class="pd-body">
+    <form method="post" action="{% url 'einv:settings' %}" novalidate autocomplete="off">
+      {% csrf_input %}
+      <input type="hidden" name="adapter" value="{{ adapter.code }}">
+      {% for item in adapter.fields %}
+      <div class="field">
+        <label class="label" for="pd-einv-{{ adapter.code }}-{{ item.name }}">{{ item.label }}{% if not item.required %} <span class="pd-muted is-size-7">{% translate "einvoicing_ui.settings.optional" %}</span>{% endif %}</label>
+        {% if item.kind == "choice" %}<div class="select"><select id="pd-einv-{{ adapter.code }}-{{ item.name }}" name="{{ item.name }}">{% for choice in adapter.choices %}<option value="{{ choice.value }}"{% if choice.value == item.value %} selected{% endif %}>{{ choice.label }}</option>{% endfor %}</select></div>
+        {% elsif item.secret %}<input class="input" type="password" id="pd-einv-{{ adapter.code }}-{{ item.name }}" name="{{ item.name }}" value="" autocomplete="new-password" placeholder="{% if item.stored %}{% translate 'einvoicing_ui.settings.secret_stored' %}{% endif %}"{% if item.errors %} aria-invalid="true"{% endif %}>
+        {% else %}<input class="input" type="{% if item.kind == 'url' %}url{% else %}text{% endif %}" id="pd-einv-{{ adapter.code }}-{{ item.name }}" name="{{ item.name }}" value="{{ item.value }}"{% if item.errors %} aria-invalid="true"{% endif %}>{% endif %}
+        {% if item.errors %}<p class="help is-danger">{{ item.errors }}</p>{% endif %}
+      </div>
+      {% endfor %}
+      <button class="button is-primary pd-touch" type="submit">{% if adapter.active %}{% translate "ui.forms.save" %}{% else %}{% translate "einvoicing_ui.actions.activate" %}{% endif %}</button>
+    </form>
+  </div>
+</section>
+{% endfor %}
+<p class="is-size-7 pd-muted">{% translate "einvoicing_ui.settings.note" %}</p>
+{% endblock content %}

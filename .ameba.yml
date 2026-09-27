@@ -1,0 +1,21 @@
+# Configuration d'Ameba pour partiduo-einvoicing.
+Globs:
+  - "**/*.cr"
+  - "!lib"
+
+Excluded:
+  - lib/
+
+# Objets exposés aux gabarits Marten : un attribut booléen doit s'appeler sans
+# `?` pour être lu dans un gabarit (D-UI-016 de l'interface).
+Naming/QueryBoolMethods:
+  Excluded:
+    - ui/bulma/presenters.cr
+
+# Correspondance champ à champ d'un format de facture (lecture UBL et CII,
+# production UBL, contrôle des paramètres d'un adaptateur, vues d'une
+# facture reçue) : un branchement par élément facultatif de la norme ; le
+# découper en fonctions n'apporterait qu'un saut de plus (DECISIONS
+# D-EINV-013).
+Metrics/CyclomaticComplexity:
+  MaxComplexity: 20

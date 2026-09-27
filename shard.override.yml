@@ -1,0 +1,18 @@
+# Force les sources locales des shards que d'autres dépendances déclarent
+# en github: (marten_auth -> marten, authn -> password-policy, webauthn -> jose,
+# pdf-a et pdf-validate -> pdf), comme dans partiduo-app (DECISIONS D-003).
+dependencies:
+  partiduo:
+    path: ../partiduo-app
+  partiduo-document:
+    path: ../partiduo-document
+  partiduo-ui-bulma:
+    path: ../partiduo-ui-bulma
+  marten:
+    path: ../../marten
+  password-policy:
+    path: ../../password-policy
+  jose:
+    path: ../../jose
+  pdf:
+    path: ../../pdf

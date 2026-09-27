@@ -1,0 +1,124 @@
+fr:
+  einvoicing:
+    module:
+      name: "Facturation électronique"
+    permissions:
+      invoice:
+        read: "Consulter les factures électroniques"
+        send: "Transmettre les factures à la plateforme agréée"
+        receive: "Traiter les factures reçues (accepter, refuser, pré-comptabiliser)"
+      settings:
+        manage: "Raccorder la plateforme agréée"
+    menu:
+      outgoing: "Factures électroniques émises"
+      incoming: "Factures électroniques reçues"
+      directory: "Annuaire de facturation électronique"
+      settings: "Plateforme agréée"
+    adapters:
+      afnor: "API normalisée XP Z12-013 (toute plateforme agréée)"
+      noalyss_peppol: "Point d'accès NOALYSS-PEPPOL (dossiers belges)"
+      unknown: "Adaptateur absent de cette distribution"
+    fields:
+      flow_url: "Adresse de l'API Flux"
+      directory_url: "Adresse de l'API Annuaire"
+      token_url: "Adresse d'obtention du jeton OAuth"
+      client_id: "Identifiant client (client_id)"
+      client_secret: "Secret client (client_secret)"
+      organization_id: "Organisation (Organization-Id)"
+      environment: "Environnement"
+      url: "Adresse du point d'accès"
+      participant_id: "Identifiant PEPPOL du participant"
+      user_id: "Identifiant utilisateur"
+      token: "Jeton d'accès"
+    modes:
+      sandbox: "Bac à sable"
+      production: "Production"
+    routes:
+      platform: "Plateforme agréée"
+      b2c: "Particulier (e-reporting)"
+      international: "International (e-reporting)"
+      off_platform: "Hors plateforme"
+    transmission_statuses:
+      pending: "À transmettre"
+      submitted: "Transmise"
+      deposited: "Déposée"
+      rejected: "Rejetée"
+      refused: "Refusée"
+      approved: "Approuvée"
+      paid: "Encaissée"
+      ereporting: "E-reporting"
+      off_platform: "Hors plateforme"
+    reception_statuses:
+      received: "À traiter"
+      accepted: "Acceptée"
+      refused: "Refusée"
+      posted: "Pré-comptabilisée"
+    codes:
+      "200": "Déposée"
+      "201": "Émise par la plateforme"
+      "202": "Reçue par la plateforme"
+      "203": "Mise à disposition"
+      "204": "Prise en charge"
+      "205": "Approuvée"
+      "206": "Approuvée partiellement"
+      "207": "En litige"
+      "208": "Suspendue"
+      "209": "Complétée"
+      "210": "Refusée"
+      "211": "Paiement transmis"
+      "212": "Encaissée"
+      "213": "Rejetée"
+      "214": "Visée"
+      "220": "Annulée"
+    issuers:
+      platform: "Plateforme"
+      seller: "Vendeur"
+      buyer: "Acheteur"
+    event_states:
+      received: "Reçu"
+      to_send: "À émettre"
+      sent: "Émis"
+      failed: "Échec, nouvelle tentative"
+      not_applicable: "Sans objet pour cette plateforme"
+    refusal_reasons:
+      DOUBLON: "Facture en double"
+      DEST_ERR: "Destinataire erroné"
+      MONTANTTOTAL_ERR: "Montant total erroné"
+      TX_TVA_ERR: "Taux de TVA erroné"
+      CMD_ERR: "Référence de commande erronée"
+      LIVR_INCOMP: "Livraison incomplète"
+      NON_CONFORME: "Facture non conforme"
+      AUTRE: "Autre motif"
+    receipt_note: "Facture électronique reçue (%{syntax})"
+    errors:
+      connection:
+        adapter:
+          unknown: "Adaptateur inconnu : %{value}."
+          regime: "L'adaptateur %{adapter} n'est pas admis pour un dossier de régime %{regime}."
+        field:
+          blank: "Ce paramètre est obligatoire."
+          https: "Adresse HTTPS attendue : %{value}."
+          choice: "Valeur non admise : %{value}."
+          too_long: "%{max} caractères au plus."
+        failed: "La plateforme ne répond pas comme attendu : %{detail}"
+        missing: "Aucune plateforme agréée n'est raccordée."
+      transmission:
+        not_issued: "Ce document n'est pas une facture émise."
+        not_transmittable: "Cette facture ne se transmet pas dans son état actuel (%{status})."
+        failed: "Transmission échouée : %{detail}"
+      reception:
+        unreadable: "Ni UBL, ni CII, ni Factur-X : fichier non reconnu."
+        reason_code: "Motif de refus inconnu : %{value}."
+        reason_blank: "Précisez le motif du refus."
+        reason_too_long: "%{max} caractères au plus."
+        account_missing: "Le journal d'achats %{ledger} n'a pas de compte de charge par défaut : indiquez-le dans le paramétrage du journal."
+        no_purchase_ledger: "Aucun journal d'achats où vous pouvez écrire."
+        supplier_unknown: "Aucune fiche fournisseur pour %{name} (SIREN %{siren}) : créez-la avant de pré-comptabiliser."
+        number_missing: "La facture reçue n'a pas de numéro."
+        no_file: "Le fichier de la facture reçue est introuvable."
+        status:
+          not_received: "Cette facture a déjà été traitée (%{status})."
+          already_decided: "Cette facture a déjà été traitée (%{status})."
+      directory:
+        too_short: "Saisissez au moins trois caractères."
+        unsupported: "La plateforme raccordée ne propose pas d'annuaire."

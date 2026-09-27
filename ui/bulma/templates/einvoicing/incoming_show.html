@@ -1,0 +1,77 @@
+{# SPDX-License-Identifier: AGPL-3.0-or-later. Facture électronique reçue : fournisseur, montants, lignes et TVA lues, doublons possibles (y compris les factures reçues hors plateforme, ADR-004 D9), écriture proposée, décisions : accepter, refuser (statut 210 émis, motif), pré-comptabiliser dans le journal d'achats. #}{% extend "ui/base.html" %}
+{% block title %}{{ title }}{% endblock title %}
+{% block crumbs %}{% include "ui/_crumbs.html" %}{% endblock crumbs %}
+{% block heading %}{{ title }}{% endblock heading %}
+{% block actions %}{% if can_accept %}<form method="post" action="{{ row.accept_url }}">{% csrf_input %}<button class="button pd-touch" type="submit">{% include "ui/_icon.html" with name="check" %}<span>{% translate "einvoicing_ui.actions.accept" %}</span></button></form>{% endif %}{% endblock actions %}
+{% block content %}
+{% if errors %}<div class="notification is-danger is-light pd-alert" role="alert">{% include "ui/_icon.html" with name="triangle-alert" %}<div>{% for message in errors %}<p>{{ message }}</p>{% endfor %}</div></div>{% endif %}
+{% if row.read_errors %}<div class="notification is-warning is-light pd-alert" role="status">{% include "ui/_icon.html" with name="triangle-alert" %}<div><p>{% translate "einvoicing_ui.incoming.read_errors" %} {{ row.read_errors }}</p></div></div>{% endif %}
+{% if duplicates || recorded %}
+<div class="notification is-warning is-light pd-alert" role="status" data-einv-duplicates>{% include "ui/_icon.html" with name="triangle-alert" %}<div>
+  <p><strong>{% translate "einvoicing_ui.incoming.duplicates" %}</strong></p>
+  <ul>{% for other in duplicates %}<li><a href="{{ other.show_url }}">{{ other.supplier }} · {{ other.number }}</a> · {{ other.date }} · {{ other.status_label }}</li>{% endfor %}
+  {% for item in recorded %}<li>{% translate "einvoicing_ui.incoming.recorded" %} {% if item.url %}<a href="{{ item.url }}">{{ item.receipt }}</a>{% else %}{{ item.receipt }}{% endif %} · {{ item.number }} · {{ item.date }} · {{ item.amount }} · <span data-einv-origin>{{ item.origin }}</span></li>{% endfor %}</ul>
+</div></div>
+{% endif %}
+<section class="pd-panel" aria-labelledby="pd-einv-in-status">
+  <header><h2 id="pd-einv-in-status">{% translate "einvoicing_ui.incoming.invoice" %}</h2><span class="tag {{ row.tone }} is-light" data-einv-status="{{ row.status }}">{{ row.status_label }}</span></header>
+  <div class="pd-body"><dl class="pd-einv-dl">
+    <dt>{% translate "einvoicing_ui.incoming.supplier" %}</dt><dd>{{ row.supplier }}{% if row.siren %} · SIREN <span class="pd-mono">{{ row.siren }}</span>{% endif %}{% if row.vat %} · <span class="pd-mono">{{ row.vat }}</span>{% endif %}{% if not row.card %} <span class="tag is-warning is-light">{% translate "einvoicing_ui.incoming.no_card" %}</span>{% endif %}</dd>
+    <dt>{% translate "einvoicing_ui.incoming.number" %}</dt><dd class="pd-mono">{{ row.number }}{% if row.credit %} <span class="tag is-light">{% translate "einvoicing_ui.incoming.credit_note" %}</span>{% endif %}</dd>
+    <dt>{% translate "einvoicing_ui.incoming.date" %}</dt><dd>{{ row.date }}{% if row.due %} · {% translate "einvoicing_ui.incoming.due" %} {{ row.due }}{% endif %}</dd>
+    <dt>{% translate "einvoicing_ui.incoming.amounts" %}</dt><dd>{% if row.net %}{{ row.net }} + {{ row.vat_total }} = {% endif %}<strong>{% if row.total %}{{ row.total }}{% else %}—{% endif %}</strong></dd>
+    <dt>{% translate "einvoicing_ui.incoming.format" %}</dt><dd>{{ row.syntax }}{% if row.profile %} <span class="pd-muted is-size-7">{{ row.profile }}</span>{% endif %}</dd>
+    <dt>{% translate "einvoicing_ui.incoming.received" %}</dt><dd>{{ row.received }}</dd>
+    {% if row.entry_url %}<dt>{% translate "einvoicing_ui.incoming.entry" %}</dt><dd><a href="{{ row.entry_url }}">{% translate "einvoicing_ui.incoming.open_entry" %}</a></dd>{% endif %}
+  </dl>
+  {% if can_files %}<div class="buttons mt-3"><a class="button is-small pd-touch" href="{{ row.original_url }}">{% include "ui/_icon.html" with name="file-text" %}<span>{% translate "einvoicing_ui.incoming.original" %}</span></a><a class="button is-small pd-touch" href="{{ row.xml_url }}">{% include "ui/_icon.html" with name="code" %}<span>{% translate "einvoicing_ui.incoming.xml" %}</span></a>{% if row.receipt_url %}<a class="button is-small pd-touch" href="{{ row.receipt_url }}">{% include "ui/_icon.html" with name="paperclip" %}<span>{% translate "einvoicing_ui.incoming.receipt" %}</span></a>{% endif %}</div>{% endif %}
+  </div>
+</section>
+{% if lines %}<section class="pd-panel" aria-labelledby="pd-einv-in-lines">
+  <header><h2 id="pd-einv-in-lines">{% translate "einvoicing_ui.incoming.lines" %}</h2></header>
+  <div class="pd-scroll"><table class="table is-fullwidth">
+    <caption class="is-sr-only">{% translate "einvoicing_ui.incoming.lines" %}</caption>
+    <thead><tr><th scope="col">{% translate "einvoicing_ui.incoming.description" %}</th><th scope="col" class="amount">{% translate "einvoicing_ui.incoming.quantity" %}</th><th scope="col" class="amount pd-hide-s">{% translate "einvoicing_ui.incoming.price" %}</th><th scope="col" class="amount">{% translate "einvoicing_ui.incoming.net" %}</th><th scope="col">{% translate "einvoicing_ui.incoming.vat" %}</th></tr></thead>
+    <tbody>{% for line in lines %}<tr><td>{{ line.description }}</td><td class="amount">{{ line.quantity }} {{ line.unit }}</td><td class="amount pd-hide-s">{% if line.price %}{{ line.price }}{% else %}—{% endif %}</td><td class="amount">{{ line.net }}</td><td>{{ line.vat }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>{% endif %}
+{% if vat_lines %}<section class="pd-panel" aria-labelledby="pd-einv-in-vat">
+  <header><h2 id="pd-einv-in-vat">{% translate "einvoicing_ui.incoming.vat_breakdown" %}</h2></header>
+  <div class="pd-scroll"><table class="table is-fullwidth">
+    <caption class="is-sr-only">{% translate "einvoicing_ui.incoming.vat_breakdown" %}</caption>
+    <thead><tr><th scope="col">{% translate "einvoicing_ui.incoming.vat" %}</th><th scope="col" class="amount">{% translate "einvoicing_ui.incoming.base" %}</th><th scope="col" class="amount">{% translate "einvoicing_ui.incoming.vat_amount" %}</th></tr></thead>
+    <tbody>{% for vat in vat_lines %}<tr><td>{{ vat.category }} {{ vat.percent }}</td><td class="amount">{{ vat.base }}</td><td class="amount">{{ vat.amount }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>{% endif %}
+{% if can_post %}<section class="pd-panel" aria-labelledby="pd-einv-in-post">
+  <header><h2 id="pd-einv-in-post">{% translate "einvoicing_ui.incoming.post_title" %}</h2></header>
+  <div class="pd-body">
+    {% if prefill %}
+    <div class="pd-scroll"><table class="table is-fullwidth" data-einv-prefill>
+      <caption class="is-sr-only">{% translate "einvoicing_ui.incoming.post_title" %}</caption>
+      <thead><tr><th scope="col">{% translate "einvoicing_ui.incoming.description" %}</th><th scope="col" class="amount">{% translate "einvoicing_ui.incoming.net" %}</th><th scope="col">{% translate "einvoicing_ui.incoming.vat" %}</th><th scope="col" class="amount">{% translate "einvoicing_ui.incoming.vat_amount" %}</th></tr></thead>
+      <tbody>{% for line in prefill %}<tr><td>{{ line.label }}</td><td class="amount">{{ line.amount }}</td><td>{{ line.vat_rate }}</td><td class="amount">{{ line.vat_amount }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    <form method="post" action="{{ row.post_url }}">{% csrf_input %}<button class="button is-primary pd-touch" type="submit">{% include "ui/_icon.html" with name="notebook-pen" %}<span>{% translate "einvoicing_ui.actions.post" %}</span></button></form>
+    <p class="help">{% translate "einvoicing_ui.incoming.post_help" %}</p>
+    {% else %}
+    <ul class="help is-danger" data-einv-prefill-errors>{% for message in prefill_errors %}<li>{{ message }}</li>{% endfor %}</ul>
+    {% endif %}
+  </div>
+</section>{% endif %}
+{% if can_receive %}<section class="pd-panel" aria-labelledby="pd-einv-in-refuse">
+  <header><h2 id="pd-einv-in-refuse">{% translate "einvoicing_ui.incoming.refuse_title" %}</h2></header>
+  <div class="pd-body">
+    <form method="post" action="{{ row.refuse_url }}">
+      {% csrf_input %}
+      <div class="field"><label class="label" for="pd-einv-reason-code">{% translate "einvoicing_ui.incoming.reason_code" %}</label>
+        <div class="select"><select id="pd-einv-reason-code" name="reason_code">{% for reason in reasons %}<option value="{{ reason.code }}">{{ reason.label }}</option>{% endfor %}</select></div></div>
+      <div class="field"><label class="label" for="pd-einv-reason">{% translate "einvoicing_ui.incoming.reason" %}</label>
+        <textarea class="textarea" id="pd-einv-reason" name="reason" rows="2" maxlength="1000"></textarea></div>
+      <button class="button is-danger pd-touch" type="submit">{% include "ui/_icon.html" with name="x" %}<span>{% translate "einvoicing_ui.actions.refuse" %}</span></button>
+      <p class="help">{% translate "einvoicing_ui.incoming.refuse_help" %}</p>
+    </form>
+  </div>
+</section>{% endif %}
+{% include "einvoicing/_events.html" %}
+{% endblock content %}

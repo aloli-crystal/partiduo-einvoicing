@@ -1,0 +1,204 @@
+= Contrat `Einvoicing::Api` — facturation électronique
+:toc: left
+:toc-title: Table des matières
+:toclevels: 3
+:icons: font
+:source-language: crystal
+
+Contrat public de l'extension EINV (ADR-004), sur le modèle de
+`Partiduo::Api` (DECISIONS C2) : acteur en premier argument, contrôle d'accès
+en première ligne (`ModuleDisabled` si EINV est inactive, `Forbidden` sans la
+permission), vues immuables, erreurs par champ (`FieldError`, clés i18n
+`einvoicing.errors.*`). L'interface `ui/bulma/` ne voit que ce module et
+`Partiduo::Api`.
+
+== Permissions
+
+[cols="2,3",options="header"]
+|===
+|Permission |Ouvre
+
+|`einvoicing.invoice.read` |Listes, consultations, fichiers, annuaire, compteurs
+|`einvoicing.invoice.send` |Transmettre, relever une facture, synchroniser
+|`einvoicing.invoice.receive` |Accepter, refuser, pré-comptabiliser, déposer à la main, synchroniser
+|`einvoicing.settings.manage` |Adaptateurs, raccordement, essai, débranchement
+|===
+
+Les fichiers reçus exigent aussi celles de DOCUMENT et des pièces jointes du
+socle (`document.receipt.read`, `core.attachment.read`) ; la
+pré-comptabilisation, `accounting.entry.post` et un journal d'achats où
+l'acteur écrit ; les exports, `invoicing.invoice.read`.
+
+== Raccordement
+
+[source]
+----
+Api.adapters(actor) : Array(AdapterView)                 # CONFIGURE
+Api.connection(actor) : ConnectionView?                  # READ
+Api.configure(actor, ConnectionInput) : Result(ConnectionView)
+Api.check_connection(actor) : Result(Nil)
+Api.disconnect(actor) : Result(Nil)
+----
+
+* `AdapterView` : `code` (`AFNOR`, `NOALYSS_PEPPOL`…), `label_key`,
+  `available` (régime du dossier), `fields` (`FieldView` : `name`, `secret`,
+  `required`, `kind` `url`/`text`/`choice`, `choices`, `value` — vide pour
+  un secret —, `stored`).
+* `configure` enregistre les paramètres et rend l'adaptateur *seul actif*
+  (index unique partiel en base). Secrets chiffrés ; un secret laissé vide
+  garde la valeur enregistrée ; les jetons en cours sont oubliés. Erreurs :
+  `connection.adapter.unknown`, `.adapter.regime`, `.field.blank`,
+  `.field.https` (toute adresse doit être HTTPS), `.field.choice`,
+  `.field.too_long`.
+* `ConnectionView#mode` : `sandbox` ou `production` (affiché en permanence).
+
+[cols="1,3",options="header"]
+|===
+|Adaptateur |Paramètres
+
+|`AFNOR` (XP Z12-013 1.3.0)
+|`flow_url` (API Flux), `directory_url` (API Annuaire, facultatif),
+`token_url`, `client_id`, `client_secret` (secret), `organization_id`
+(en-tête `Organization-Id`, facultatif), `environment`. Régimes `fr`, `be`.
+
+|`NOALYSS_PEPPOL`
+|`url`, `participant_id`, `user_id`, `token` (secret), `environment`.
+Régime `be`.
+|===
+
+== Synchronisation
+
+[source]
+----
+Api.synchronize(actor) : Result(SyncView)   # SEND ou RECEIVE
+----
+
+Dans l'ordre : factures à transmettre (Facturation active), factures reçues
+puis statuts lus *par curseur* page après page (le curseur est enregistré
+avec chaque page, dans la même transaction), statuts à émettre, lots
+d'e-reporting. `SyncView` : `transmitted`, `received`, `statuses`,
+`sent_statuses`, `reports`, `errors` (un échec de la plateforme n'interrompt
+pas les autres étapes ; ce qui a échoué est repris à la synchronisation
+suivante). Sans raccordement : `connection.missing`.
+
+== Factures émises
+
+[source]
+----
+Api.transmissions(actor, TransmissionQuery) : Array(TransmissionView)
+Api.transmission(actor, id) : TransmissionView
+Api.transmission_for_invoice(actor, invoice_id) : TransmissionView?
+Api.transmission_events(actor, id) : Array(EventView)
+Api.track(actor, invoice_id) : Result(TransmissionView)      # SEND, Facturation active
+Api.transmit(actor, id) : Result(TransmissionView)           # SEND, Facturation active
+Api.export(actor, invoice_id, format) : FileView             # facturx cii extended-ctc-fr ubl peppol
+----
+
+* Relevé automatique à `invoice.issued` et `credit_note.issued` ; `track`
+  relève un document émis avant l'activation (idempotent).
+* `route` : `platform`, `b2c`, `international`, `off_platform` ;
+  `platform_required` : client professionnel français émis hors plateforme
+  (signalé, jamais bloqué).
+* `status` : `pending`, `submitted`, `deposited` (200), `rejected` (213),
+  `refused` (210), `approved` (205), `paid` (212), `ereporting`,
+  `off_platform`. `transmittable?` : voie `platform` ou `b2c`, statut
+  `pending` ou `rejected`.
+* Fichier transmis : PDF/A-3 Factur-X de la Facturation
+  (`Partiduo::Api::Invoicing.document_pdf`), CII avec note `BAR` = `B2C` pour
+  une vente à un particulier, UBL PEPPOL BIS 3 pour NOALYSS-PEPPOL. Une
+  facture remise par la plateforme (`platform`) passe « envoyée » dans la
+  Facturation (`mark_sent`).
+* Erreurs de `transmit` : `transmission.not_transmittable`,
+  `transmission.failed` (`detail`), `connection.missing`.
+
+== Factures reçues
+
+[source]
+----
+Api.receptions(actor, ReceptionQuery) : Array(ReceptionView)
+Api.reception(actor, id) : ReceptionView
+Api.reception_events(actor, id) : Array(EventView)
+Api.reception_file(actor, id, "original" | "xml") : FileView
+Api.import(actor, filename, content) : Result(ReceptionView)   # RECEIVE + DOCUMENT
+Api.accept(actor, id) : Result(ReceptionView)
+Api.refuse(actor, id, RefuseInput) : Result(ReceptionView)
+Api.duplicates(actor, id) : DuplicatesView
+Api.purchase_prefill(actor, id) : Result(Accounting::ReceivedInvoiceInput)
+Api.check_post(actor, id) : Result(Accounting::EntryDraftView)
+Api.post(actor, id, input = nil) : Result(Accounting::ReceivedInvoiceView)
+----
+
+* Chaque facture reçue entre dans la boîte « Justificatifs à traiter »
+  (`Document::Api.receive`, `external_ref` = `einvoicing:<référence>`,
+  source `einvoice`) : PDF lisible et XML embarqué pour un Factur-X, le XML
+  lui-même pour un UBL ou un CII. Une facture illisible est gardée avec ses
+  erreurs (`read_errors`).
+* `status` : `received`, `accepted`, `refused`, `posted`.
+* `refuse` : motif parmi `REFUSAL_REASONS` (`AUTRE` exige un texte) ;
+  statut 210 à émettre (envoi immédiat tenté après validation, sinon à la
+  synchronisation) ; justificatif écarté dans DOCUMENT.
+* `purchase_prefill` : premier journal d'achats où l'acteur écrit, compte de
+  charge par défaut du journal, fiche du fournisseur, une ligne par taux du
+  récapitulatif de TVA (signée négativement pour un avoir), pièce jointe =
+  fichier reçu, source `document:<id>` (le justificatif passe « Rattaché »),
+  origine `Platform`. Erreurs : `reception.no_purchase_ledger`,
+  `reception.account_missing`, `reception.supplier_unknown`,
+  `reception.number_missing`, `reception.no_file`.
+* `post` : `Partiduo::Api::Accounting.post_received_invoice` ; refusé en
+  doublon (`accounting.errors.received_invoice.duplicate`), y compris avec
+  une facture saisie « reçue hors plateforme ».
+* `DuplicatesView` : `receptions` (même fournisseur, même numéro normalisé),
+  `received_invoices` (Comptabilité : `received_invoice_duplicates`).
+
+== Annuaire et compteurs
+
+[source]
+----
+Api.lookup(actor, query) : Result(Array(DirectoryEntryView))  # SIREN, SIRET ou adresse
+Api.counts(actor) : CountsView
+Api.pending_count(actor) : Int64?             # factures reçues à traiter (menu)
+Api.outgoing_attention_count(actor) : Int64?  # factures à transmettre ou rejetées (menu)
+----
+
+`DirectoryEntryView` : adresse (`SIREN`, `SIREN_SIRET`, `SIREN_SUFFIXE`,
+`SIREN_SIRET_CODEROUTAGE`), schéma `0225`, nom, SIREN, SIRET, code de
+routage, plateforme, état, `card_code` (fiche du socle de même SIREN).
+Erreurs : `directory.too_short`, `directory.unsupported`,
+`connection.missing`, `connection.failed`.
+
+== Cycle de vie
+
+`EventView` : `code` (AFNOR, libellé `einvoicing.codes.<code>`),
+`occurred_at`, `issuer` (`platform`, `seller`, `buyer`), `reason_code`,
+`reason`, `amount`, `state` (`received`, `to_send`, `sent`, `failed`,
+`not_applicable`), `sent_at`, `error`.
+
+Abonnements : `payment.matched` (clés `sources` `invoice:<id>`, `amounts`,
+`matched_on`) et `payment.recorded` (`invoice_id`, `amount`, `paid_on`)
+émettent « Encaissée » (212) sur une facture transmise (`platform`, `b2c`),
+une fois par lettrage ou encaissement (`origin`).
+
+== Étendre : un adaptateur de plateforme
+
+[source]
+----
+class MaPa::Connector < Einvoicing::Connector
+  def submit(invoice : OutgoingInvoice) : Submission
+  def fetch_incoming(after : Cursor?) : Page(IncomingInvoice)
+  def send_status(event : LifecycleEvent) : Nil
+  def fetch_statuses(after : Cursor?) : Page(LifecycleEvent)
+  def send_ereporting(batch : EReportingBatch) : Nil
+  def check : Nil
+  def mode : String
+end
+
+Einvoicing::Connections.register(Einvoicing::Connections::Adapter.new(
+  "MAPA", "mapa.adapter", %w[fr], [Einvoicing::Connections::Field.new("client_secret", secret: true)],
+  ->(settings : Einvoicing::Connections::Settings) { MaPa::Connector.new(settings).as(Einvoicing::Connector) }))
+----
+
+`Settings#access_token`, `#refresh_token`, `#store_tokens` et
+`#clear_tokens` conservent les jetons chiffrés. Les requêtes passent par
+`Einvoicing::Http.exec` (réseau réel, TLS vérifié ; plateforme simulée dans
+les specs). `Unsupported` signale une opération que la plateforme ne propose
+pas (l'événement devient `not_applicable`).
