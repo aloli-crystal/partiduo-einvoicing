@@ -91,6 +91,24 @@ en:
       AUTRE: "Other reason"
     receipt_note: "Received e-invoice (%{syntax})"
     errors:
+      sync:
+        invoice: "Invoice %{number}: %{detail}"
+        running: "A synchronisation or transmission is already running: try again in a moment."
+      transport:
+        raw: "%{detail}"
+        json: "Unreadable response from the platform (%{status}): %{detail}"
+        https: "Non-HTTPS address refused: %{url}"
+        unreachable: "%{host} unreachable: %{detail}"
+        unavailable: "Platform unavailable (%{status})."
+        status_rejected: "Status refused by the platform: %{detail}"
+        ereporting_rejected: "E-reporting refused by the platform: %{detail}"
+        no_directory: "The connected platform offers no directory."
+        missing_field: "Incomplete response from the platform (no %{field})."
+        platform: "The platform answered %{status}: %{detail}"
+        auth_refused: "Authentication refused by the platform (%{status})."
+        no_statuses: "The access point does not exchange statuses."
+        no_ereporting: "No e-reporting through this access point."
+        orphan_event: "Status without an invoice."
       connection:
         adapter:
           unknown: "Unknown adapter: %{value}."
@@ -103,10 +121,15 @@ en:
         failed: "The platform did not answer as expected: %{detail}"
         missing: "No accredited platform is connected."
       transmission:
+        internal: "Internal error during transmission: %{detail}"
+        format: "Invoice file not produced: %{detail}"
         not_issued: "This document is not an issued invoice."
         not_transmittable: "This invoice cannot be sent in its current state (%{status})."
         failed: "Sending failed: %{detail}"
       reception:
+        vat_rate_unknown: "No VAT rate of the books matches the invoice rate %{category} %{percent} %: add it to the VAT rates before pre-posting."
+        vat_rates_unreadable: "You cannot read the VAT rates of the books: the invoice VAT %{category} %{percent} % cannot be carried over."
+        total_mismatch: "The proposed entry totals %{total} instead of %{expected} (invoice total including VAT): it is not pre-posted, check the invoice."
         unreadable: "Neither UBL, CII nor Factur-X: file not recognised."
         reason_code: "Unknown refusal reason: %{value}."
         reason_blank: "Please state the refusal reason."

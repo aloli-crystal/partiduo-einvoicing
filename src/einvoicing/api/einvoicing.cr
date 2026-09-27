@@ -98,7 +98,7 @@ module Einvoicing
     rescue Connections::NotConfigured
       Result(Nil).failure(FieldError.base("einvoicing.errors.connection.missing"))
     rescue ex : ConnectorError
-      Result(Nil).failure(FieldError.base("einvoicing.errors.connection.failed", {"detail" => ex.message.to_s}))
+      Result(Nil).failure(FieldError.base("einvoicing.errors.connection.failed", {"detail" => ex.localized}))
     end
 
     # --- Synchronisation -------------------------------------------------------
@@ -114,12 +114,23 @@ module Einvoicing
       Result(SyncView).success(Sync.run(actor.user_id))
     rescue Connections::NotConfigured
       Result(SyncView).failure(FieldError.base("einvoicing.errors.connection.missing"))
+    rescue Sync::Busy
+      Result(SyncView).failure(FieldError.base("einvoicing.errors.sync.running"))
     end
 
     # --- Factures émises -------------------------------------------------------
 
-    def self.transmissions(actor : Actor, query : TransmissionQuery = TransmissionQuery.new) : Array(TransmissionView)
+    # Les factures émises (client, montants, numéros) se lisent aussi avec
+    # `invoicing.invoice.read` (DECISIONS D-EINV-023).
+    INVOICE_READ = "invoicing.invoice.read"
+
+    private def self.authorize_outgoing!(actor : Actor) : Nil
       Guard.authorize!(actor, READ, module_code: MODULE_CODE)
+      raise Partiduo::Api::Forbidden.new(INVOICE_READ) unless actor.system || actor.can?(INVOICE_READ)
+    end
+
+    def self.transmissions(actor : Actor, query : TransmissionQuery = TransmissionQuery.new) : Array(TransmissionView)
+      authorize_outgoing!(actor)
       rows = Transmission.all
       query.status.try { |status| rows = rows.filter(status: status) }
       if text = query.search.try(&.strip).presence
@@ -130,18 +141,18 @@ module Einvoicing
     end
 
     def self.transmission(actor : Actor, id : Int64) : TransmissionView
-      Guard.authorize!(actor, READ, module_code: MODULE_CODE)
+      authorize_outgoing!(actor)
       Outgoing.view(Transmission.filter(id: id).first || raise Partiduo::Api::NotFound.new("transmission", id))
     end
 
     # Suivi d'un document de la Facturation, `nil` s'il n'est pas relevé.
     def self.transmission_for_invoice(actor : Actor, invoice_id : Int64) : TransmissionView?
-      Guard.authorize!(actor, READ, module_code: MODULE_CODE)
+      authorize_outgoing!(actor)
       Transmission.filter(invoice_id: invoice_id).first.try { |row| Outgoing.view(row) }
     end
 
     def self.transmission_events(actor : Actor, id : Int64) : Array(EventView)
-      Guard.authorize!(actor, READ, module_code: MODULE_CODE)
+      authorize_outgoing!(actor)
       Event.filter(transmission_id: id).order(:occurred_at, :id).to_a.map { |event| Lifecycle.view(event) }
     end
 
@@ -167,20 +178,29 @@ module Einvoicing
     def self.transmit(actor : Actor, id : Int64) : Result(TransmissionView)
       Guard.authorize!(actor, SEND, module_code: MODULE_CODE)
       Partiduo::Modules.require_active!("INVOICING")
-      row = Transmission.filter(id: id).first || raise Partiduo::Api::NotFound.new("transmission", id)
-      unless Outgoing.view(row).transmittable?
-        return Result(TransmissionView).failure(FieldError.base("einvoicing.errors.transmission.not_transmittable",
-          {"status" => row.status.to_s}))
-      end
+      Transmission.filter(id: id).first || raise Partiduo::Api::NotFound.new("transmission", id)
       connection = Connections.active
       return Result(TransmissionView).failure(FieldError.base("einvoicing.errors.connection.missing")) if connection.nil?
-      row.status = "pending" if row.status == "rejected"
-      error = Outgoing.transmit!(row, Connections.connector(connection), connection.adapter.to_s, actor.user_id)
-      if error
-        Result(TransmissionView).failure(FieldError.base("einvoicing.errors.transmission.failed", {"detail" => error}))
-      else
-        Result(TransmissionView).success(Outgoing.view(row))
+      # Même verrou que la synchronisation, puis canal relu (D-EINV-021,
+      # D-EINV-022) : la ligne est relue sous le verrou.
+      Sync.exclusive do
+        row = Transmission.filter(id: id).first || raise Partiduo::Api::NotFound.new("transmission", id)
+        Outgoing.refresh!(row)
+        unless Outgoing.view(row).transmittable?
+          next Result(TransmissionView).failure(FieldError.base("einvoicing.errors.transmission.not_transmittable",
+            {"status" => row.status.to_s}))
+        end
+        error = Outgoing.transmit!(row, Connections.connector(connection), connection.adapter.to_s, actor.user_id,
+          retry_rejected: true)
+        if error
+          Result(TransmissionView).failure(FieldError.base("einvoicing.errors.transmission.failed",
+            {"detail" => ErrorText.translate(error)}))
+        else
+          Result(TransmissionView).success(Outgoing.view(row))
+        end
       end
+    rescue Sync::Busy
+      Result(TransmissionView).failure(FieldError.base("einvoicing.errors.sync.running"))
     end
 
     # Fichier d'une facture émise, produit à la demande (ADR-004 D3) :
@@ -307,12 +327,17 @@ module Einvoicing
         chosen = input || proposed
         next Result(Acc::ReceivedInvoiceView).failure(errors) if chosen.nil?
         # La pièce jointe, la source et l'origine restent celles de la
-        # facture reçue, quoi qu'ait saisi l'écran.
-        if proposed
-          chosen = chosen.copy_with(origin: Acc::ReceptionOrigin::Platform, platform_reference: proposed.platform_reference,
-            document: chosen.document.copy_with(attachment_id: proposed.document.attachment_id,
-              source: proposed.document.source))
+        # facture reçue, quoi qu'ait saisi l'écran — même quand l'écriture
+        # proposée n'a pu être construite (fournisseur choisi à l'écran).
+        receipt = row.receipt_id.try { |receipt_id| Document::Api.receipt(Actor.system, receipt_id.to_i64) }
+        if receipt.nil?
+          next Result(Acc::ReceivedInvoiceView).failure(FieldError.base("einvoicing.errors.reception.no_file"))
         end
+        platform_ref = row.platform_ref.to_s
+        chosen = chosen.copy_with(origin: Acc::ReceptionOrigin::Platform,
+          platform_reference: platform_ref.size > 255 ? platform_ref[0, 255] : platform_ref,
+          document: chosen.document.copy_with(attachment_id: receipt.original_attachment_id,
+            source: "#{Document::Api::SOURCE_PREFIX}#{receipt.id}"))
         result = Acc.post_received_invoice(actor, chosen)
         next result if result.failure?
         posted = result.value!
@@ -388,7 +413,7 @@ module Einvoicing
     rescue Unsupported
       Result(Array(DirectoryEntryView)).failure(FieldError.base("einvoicing.errors.directory.unsupported"))
     rescue ex : ConnectorError
-      Result(Array(DirectoryEntryView)).failure(FieldError.base("einvoicing.errors.connection.failed", {"detail" => ex.message.to_s}))
+      Result(Array(DirectoryEntryView)).failure(FieldError.base("einvoicing.errors.connection.failed", {"detail" => ex.localized}))
     end
 
     # --- Compteurs -------------------------------------------------------------
@@ -437,7 +462,8 @@ module Einvoicing
         "sandbox"
       end
       ConnectionView.new(row.adapter.to_s, adapter.try(&.label_key) || "einvoicing.adapters.unknown", row.active!, mode,
-        adapter ? fields(adapter, row) : [] of FieldView, row.last_sync_at, row.last_error || "", row.updated_at!)
+        adapter ? fields(adapter, row) : [] of FieldView, row.last_sync_at, ErrorText.translate(row.last_error || ""),
+        row.updated_at!)
     end
 
     private def self.status_error(row : Reception, code : String) : Result(ReceptionView)

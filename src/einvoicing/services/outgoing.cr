@@ -14,6 +14,8 @@ module Einvoicing
 
     SYSTEM = Partiduo::Api::Actor.system
 
+    Log = ::Log.for("einvoicing")
+
     # Abonné de `invoice.issued` et `credit_note.issued` : la facture est
     # relevée avec sa route. Idempotent (une facture n'est relevée qu'une
     # fois). Rien n'est bloqué (ADR-004 D9).
@@ -28,24 +30,37 @@ module Einvoicing
 
     # Relève un document fiscal émis.
     def self.record!(view : Inv::DocumentView) : Transmission
-      settings = Partiduo::Api::Core.settings(SYSTEM)
-      regime = settings.tax_regime
-      country = view.customer.country_code.presence || settings.country_code
-      international = country != settings.country_code
-      route, platform_required = route_of(view, regime, international)
+      route, platform_required, international = route_for(view)
       totals = view.totals
+      country = view.customer.country_code.presence || Partiduo::Api::Core.settings(SYSTEM).country_code
       row = Transmission.new(
         invoice_id: view.id, kind: view.kind, number: view.number.to_s, type_code: view.type_code.to_s,
         customer_card_id: view.customer_card_id, customer_name: view.customer.name, customer_country: country,
         issue_date: view.issue_date, currency_code: view.currency_code, total_net: totals.total_net,
         total_vat: totals.total_vat, total_gross: totals.total_gross, channel: view.issue_channel, b2c: view.b2c,
-        route: route, platform_required: platform_required,
-        status: {"platform" => "pending", "b2c" => "pending", "international" => "ereporting"}[route]? || "off_platform",
-        tracking_id: "PDUO-#{UUID.random}",
+        route: route, platform_required: platform_required, status: initial_status(route),
+        tracking_id: "PDUO-#{UUID.random}", channel_final: !view.sent_at.nil?,
       )
       row.save!
-      EReporting.queue!(row, view) if route == "international"
+      EReporting.queue!(row, view) if international && route == "international"
       row
+    end
+
+    private def self.initial_status(route : String) : String
+      {"platform" => "pending", "b2c" => "pending", "international" => "ereporting"}[route]? || "off_platform"
+    end
+
+    # Voie et signalement d'un document, d'après son canal et son client.
+    # Une facture de canal « plateforme » déjà envoyée par un autre moyen
+    # (courriel de la Facturation, papier marqué envoyé) sans avoir été
+    # déposée n'est plus transmise : elle suit la voie de son client hors
+    # plateforme (`sent_elsewhere`).
+    def self.route_for(view : Inv::DocumentView, sent_elsewhere : Bool = false) : {String, Bool, Bool}
+      settings = Partiduo::Api::Core.settings(SYSTEM)
+      country = view.customer.country_code.presence || settings.country_code
+      international = country != settings.country_code
+      route, platform_required = route_of(view, settings.tax_regime, international, sent_elsewhere)
+      {route, platform_required, international}
     end
 
     # Route d'un document (ADR-004 D8, D9) et signalement « la réforme
@@ -58,14 +73,52 @@ module Einvoicing
     #   ventes internationales ;
     # * sinon hors plateforme ; signalé si le client est un professionnel
     #   français (l'émission par la plateforme est alors obligatoire).
-    def self.route_of(view : Inv::DocumentView, regime : String, international : Bool) : {String, Bool}
-      return {"platform", false} if view.issue_channel == "platform"
+    def self.route_of(view : Inv::DocumentView, regime : String, international : Bool,
+                      sent_elsewhere : Bool = false) : {String, Bool}
+      return {"platform", false} if view.issue_channel == "platform" && !sent_elsewhere
       if regime == "fr"
         return {"b2c", false} if view.b2c
         return {"international", false} if international
         return {"off_platform", view.customer.professional?}
       end
       {"off_platform", false}
+    end
+
+    # Statuts où la voie se recalcule encore : rien n'est déposé ni déclaré.
+    REFRESHABLE = %w[pending rejected off_platform ereporting]
+
+    # Relit le canal du document avant de transmettre (D-INV-016 : il reste
+    # modifiable jusqu'à l'envoi ; DECISIONS D-EINV-021) et met à jour la
+    # voie, le statut, le signalement et la déclaration d'e-reporting. Rend
+    # `false` si la ligne n'a pas pu être relue (document introuvable).
+    def self.refresh!(row : Transmission) : Bool
+      return true if row.channel_final || !REFRESHABLE.includes?(row.status)
+      report = Report.filter(transmission_id: row.id).first
+      if report && report.state.in?("sent", "not_applicable")
+        row.channel_final = true
+        row.save!
+        return true
+      end
+      view = Inv.document(SYSTEM, row.invoice_id!.to_i64)
+      # Envoyée sans dépôt : le canal est figé et ce n'était pas la plateforme
+      # (le dépôt pose lui-même l'envoi).
+      sent_elsewhere = !view.sent_at.nil? && row.platform_ref.nil?
+      route, platform_required, international = route_for(view, sent_elsewhere)
+      row.channel = view.issue_channel
+      row.b2c = view.b2c
+      row.platform_required = platform_required
+      if route != row.route
+        row.route = route
+        row.status = row.status == "rejected" && route.in?("platform", "b2c") ? "rejected" : initial_status(route)
+        row.error = "" unless row.status == "rejected"
+        report.try(&.delete) if route != "international"
+      end
+      row.channel_final = !view.sent_at.nil?
+      row.save!
+      EReporting.queue!(row, view) if route == "international" && international && report.nil?
+      true
+    rescue Partiduo::Api::NotFound
+      false
     end
 
     # Facture à transmettre, au format que préfère l'adaptateur :
@@ -93,8 +146,49 @@ module Einvoicing
     end
 
     # Transmet une facture ; `nil` en cas de succès, sinon le message
-    # d'erreur (la facture reste à transmettre).
-    def self.transmit!(row : Transmission, connector : Connector, adapter : String, by : Int64?) : String?
+    # d'erreur enregistré (`ErrorText`, la facture reste à transmettre).
+    # La ligne est verrouillée et son statut revérifié avant le dépôt : une
+    # facture déjà déposée par une autre opération ne l'est pas deux fois
+    # (DECISIONS D-EINV-022). Une erreur du contrat ou de la base sur cette
+    # facture est notée sur la ligne ; la synchronisation continue.
+    def self.transmit!(row : Transmission, connector : Connector, adapter : String, by : Int64?,
+                       retry_rejected : Bool = false) : String?
+      error = nil
+      Partiduo::Api::Transaction.run do
+        locked = Transmission.all.lock.filter(id: row.id).first
+        ready = locked && (locked.status == "pending" || (retry_rejected && locked.status == "rejected"))
+        next Partiduo::Api::Result(Nil).success(nil) unless locked && ready && locked.route.in?("platform", "b2c")
+        error = submit!(locked, connector, adapter, by)
+        Partiduo::Api::Result(Nil).success(nil)
+      end
+      reload(row)
+      error
+    rescue ex
+      Log.error(exception: ex) { "facture #{row.number} non transmise" }
+      text = ex.is_a?(ConnectorError) ? ex.text : ErrorText.encode("einvoicing.errors.transmission.internal",
+        {"detail" => ex.message.to_s})
+      Transmission.filter(id: row.id).update(attempts: row.attempts!.to_i32 + 1, error: text, updated_at: Time.utc)
+      reload(row)
+      text
+    end
+
+    private def self.reload(row : Transmission) : Nil
+      fresh = Transmission.filter(id: row.id).first
+      return if fresh.nil?
+      row.status = fresh.status
+      row.route = fresh.route
+      row.platform_ref = fresh.platform_ref
+      row.attempts = fresh.attempts
+      row.error = fresh.error
+      row.syntax = fresh.syntax
+      row.profile = fresh.profile
+      row.adapter = fresh.adapter
+      row.submitted_at = fresh.submitted_at
+      row.last_code = fresh.last_code
+      row.channel_final = fresh.channel_final
+    end
+
+    private def self.submit!(row : Transmission, connector : Connector, adapter : String, by : Int64?) : String?
       invoice = outgoing_invoice(row, connector)
       submission = connector.submit(invoice)
       row.platform_ref = submission.platform_ref
@@ -106,6 +200,7 @@ module Einvoicing
       row.attempts = row.attempts!.to_i32 + 1
       row.error = ""
       row.status = "submitted"
+      row.channel_final = submission.status != "error"
       row.save!
       case submission.status
       when "ok"
@@ -115,14 +210,19 @@ module Einvoicing
           reason_code: submission.reason_code, reason: submission.reason))
       end
       # Remise par la plateforme : la facture passe « envoyée » dans le
-      # module Facturation (canal figé).
-      Inv.mark_sent(SYSTEM, row.invoice_id!.to_i64) if row.route == "platform"
+      # module Facturation (canal figé). Pas après un rejet (213) : la
+      # facture n'est pas remise et son canal doit rester modifiable.
+      if row.route == "platform" && submission.status != "error"
+        Inv.mark_sent(SYSTEM, row.invoice_id!.to_i64)
+      end
       nil
     rescue ex : ConnectorError | Formats::Cii::Error
+      text = ex.is_a?(ConnectorError) ? ex.text : ErrorText.encode("einvoicing.errors.transmission.format",
+        {"detail" => ex.message.to_s})
       row.attempts = row.attempts!.to_i32 + 1
-      row.error = ex.message.to_s
+      row.error = text
       row.save!
-      ex.message.to_s
+      text
     end
 
     # Fichier d'une facture émise, produit à la demande (ADR-004 D3).
@@ -170,7 +270,7 @@ module Einvoicing
         route: row.route!, platform_required: row.platform_required!, status: row.status!,
         last_code: row.last_code || "", adapter: row.adapter || "", syntax: row.syntax || "", profile: row.profile || "",
         platform_ref: row.platform_ref, tracking_id: row.tracking_id!, submitted_at: row.submitted_at,
-        attempts: row.attempts!.to_i32, error: row.error || "", created_at: row.created_at!,
+        attempts: row.attempts!.to_i32, error: ErrorText.translate(row.error || ""), created_at: row.created_at!,
       )
     end
   end

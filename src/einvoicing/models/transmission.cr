@@ -32,6 +32,10 @@ module Einvoicing
     # que le canal est le courriel ou le papier : signalé, jamais bloqué
     # (ADR-004 D9).
     field :platform_required, :bool, default: false
+    # Canal définitif : facture envoyée (canal figé par la Facturation),
+    # déposée, ou déclarée en e-reporting. Tant qu'il ne l'est pas, la voie
+    # est recalculée avant chaque transmission (DECISIONS D-EINV-021).
+    field :channel_final, :bool, default: false
     # `pending`, `submitted`, `deposited` (200), `rejected` (213), `refused`
     # (210), `approved` (205), `paid` (212), `ereporting`, `off_platform`.
     field :status, :string, max_size: 16, index: true

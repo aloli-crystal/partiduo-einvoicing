@@ -79,7 +79,17 @@ avec chaque page, dans la même transaction), statuts à émettre, lots
 d'e-reporting. `SyncView` : `transmitted`, `received`, `statuses`,
 `sent_statuses`, `reports`, `errors` (un échec de la plateforme n'interrompt
 pas les autres étapes ; ce qui a échoué est repris à la synchronisation
-suivante). Sans raccordement : `connection.missing`.
+suivante). Sans raccordement : `connection.missing`. Une seule
+synchronisation ou transmission à la fois (verrou consultatif) : sinon
+`sync.running` (D-EINV-022). Le canal de chaque facture non définitive est
+relu avant de transmettre (D-EINV-021).
+
+Erreurs de la plateforme : `ConnectorError` porte une clé i18n
+(`einvoicing.errors.transport.*`) et ses paramètres, le texte brut de la
+plateforme n'étant qu'un paramètre `detail`. `SyncView.errors`,
+`ConnectionView.last_error`, `TransmissionView.error` et `EventView.error`
+sont traduits à la lecture dans la langue courante (`Einvoicing::ErrorText`,
+D-EINV-024).
 
 == Factures émises
 
@@ -94,6 +104,10 @@ Api.transmit(actor, id) : Result(TransmissionView)           # SEND, Facturation
 Api.export(actor, invoice_id, format) : FileView             # facturx cii extended-ctc-fr ubl peppol
 ----
 
+* Les quatre lectures (`transmissions`, `transmission`,
+  `transmission_for_invoice`, `transmission_events`) exigent en plus
+  `invoicing.invoice.read` (D-EINV-023).
+
 * Relevé automatique à `invoice.issued` et `credit_note.issued` ; `track`
   relève un document émis avant l'activation (idempotent).
 * `route` : `platform`, `b2c`, `international`, `off_platform` ;
@@ -107,7 +121,12 @@ Api.export(actor, invoice_id, format) : FileView             # facturx cii exten
   (`Partiduo::Api::Invoicing.document_pdf`), CII avec note `BAR` = `B2C` pour
   une vente à un particulier, UBL PEPPOL BIS 3 pour NOALYSS-PEPPOL. Une
   facture remise par la plateforme (`platform`) passe « envoyée » dans la
-  Facturation (`mark_sent`).
+  Facturation (`mark_sent`), sauf rejet immédiat du dépôt (213) : son canal
+  reste modifiable. Une facture de canal `platform` déjà envoyée sans dépôt
+  n'est pas déposée.
+* « Encaissée » (212) au lettrage ou à l'encaissement : le statut ne passe
+  `paid` qu'une fois la facture connue de la plateforme ; sinon le 212
+  attend le dépôt (D-EINV-020).
 * Erreurs de `transmit` : `transmission.not_transmittable`,
   `transmission.failed` (`detail`), `connection.missing`.
 
@@ -143,7 +162,10 @@ Api.post(actor, id, input = nil) : Result(Accounting::ReceivedInvoiceView)
   fichier reçu, source `document:<id>` (le justificatif passe « Rattaché »),
   origine `Platform`. Erreurs : `reception.no_purchase_ledger`,
   `reception.account_missing`, `reception.supplier_unknown`,
-  `reception.number_missing`, `reception.no_file`.
+  `reception.number_missing`, `reception.no_file`, `reception.vat_rate_unknown`
+  et `reception.vat_rates_unreadable` (champ `vat` : TVA sans taux du dossier
+  correspondant), `reception.total_mismatch` (champ `total` : l'écriture ne
+  fait pas le TTC), D-EINV-025.
 * `post` : `Partiduo::Api::Accounting.post_received_invoice` ; refusé en
   doublon (`accounting.errors.received_invoice.duplicate`), y compris avec
   une facture saisie « reçue hors plateforme ».

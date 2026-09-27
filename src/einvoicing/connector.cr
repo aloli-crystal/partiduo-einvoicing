@@ -1,14 +1,77 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 module Einvoicing
+  # Message d'erreur conservé en base ou rendu par le contrat (dernière
+  # erreur du raccordement, erreur d'une facture émise, d'un statut, d'un lot
+  # d'e-reporting) : une clé i18n et ses paramètres, traduits à la lecture
+  # dans la langue de l'utilisateur (DECISIONS D-EINV-024). Le texte brut
+  # renvoyé par une plateforme n'est jamais traduit : il reste un paramètre
+  # (`detail`). Un texte enregistré sans clé (antérieur, ou motif de rejet
+  # de la plateforme) est rendu tel quel.
+  module ErrorText
+    PREFIX = "i18n:"
+
+    # Clé d'un texte brut, rendu tel quel.
+    RAW = "einvoicing.errors.transport.raw"
+
+    def self.encode(key : String, params : Hash(String, String) = {} of String => String) : String
+      "#{PREFIX}#{({"key" => key, "params" => params}).to_json}"
+    end
+
+    # Clé et paramètres d'un texte enregistré.
+    def self.decode(text : String) : {String, Hash(String, String)}
+      if text.starts_with?(PREFIX)
+        json = JSON.parse(text[PREFIX.size..]) rescue nil
+        if json && (key = json["key"]?.try(&.as_s?))
+          params = {} of String => String
+          json["params"]?.try(&.as_h?).try(&.each { |name, value| params[name] = value.as_s? || value.to_s })
+          return {key, params}
+        end
+      end
+      {RAW, {"detail" => text}}
+    end
+
+    # Texte traduit dans la langue courante ; un paramètre lui-même encodé
+    # (erreur d'une facture dans la ligne de synchronisation) est traduit
+    # aussi.
+    def self.translate(text : String) : String
+      return "" if text.empty?
+      key, params = decode(text)
+      translate(key, params)
+    end
+
+    def self.translate(key : String, params : Hash(String, String)) : String
+      return params["detail"]? || "" if key == RAW
+      values = params.transform_values { |value| value.starts_with?(PREFIX) ? translate(value) : value }
+      I18n.t(key, values)
+    end
+  end
+
   # Échec d'un échange avec la plateforme agréée (réseau, authentification,
   # réponse inattendue). La synchronisation le consigne et reprendra au même
-  # curseur ; rien n'est perdu.
+  # curseur ; rien n'est perdu. `message` (journaux) reste en français ;
+  # l'écran lit `key` et `params` (`text`, `localized`), où le texte brut de
+  # la plateforme n'est qu'un paramètre `detail`.
   class ConnectorError < Exception
     getter status : Int32?
+    getter key : String
+    getter params : Hash(String, String)
 
-    def initialize(message : String, @status : Int32? = nil)
+    def initialize(message : String, @status : Int32? = nil, key : String? = nil,
+                   params : Hash(String, String)? = nil)
       super(message)
+      @key = key || ErrorText::RAW
+      @params = params || {"detail" => message}
+    end
+
+    # Texte à enregistrer (`ErrorText.encode`).
+    def text : String
+      ErrorText.encode(key, params)
+    end
+
+    # Texte traduit dans la langue courante.
+    def localized : String
+      ErrorText.translate(key, params)
     end
   end
 
@@ -170,7 +233,7 @@ module Einvoicing
 
     # Recherche dans l'annuaire : SIREN, SIRET ou adresse électronique.
     def lookup(query : String) : Array(DirectoryEntry)
-      raise Unsupported.new("annuaire non proposé par cette plateforme")
+      raise Unsupported.new("annuaire non proposé par cette plateforme", key: "einvoicing.errors.transport.no_directory")
     end
 
     # Vérifie le raccordement (authentification comprise).

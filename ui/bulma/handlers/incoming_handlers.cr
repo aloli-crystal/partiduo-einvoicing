@@ -97,9 +97,12 @@ module Einvoicing
           "events"     => listed(Api.reception_events(actor, view.id).map { |event| Present.event(event, fmt) }),
           "duplicates" => listed(duplicates.receptions.map { |other| Present.reception(other, fmt) }),
           "recorded"   => listed(duplicates.received_invoices.map do |item|
-            Ui.row({"number" => item.number, "date" => fmt.date(item.invoice_date), "amount" => fmt.amount(item.total_amount),
+            # Écriture d'un journal que l'utilisateur ne lit pas : le seul
+            # signal de doublon (D-ACC-020).
+            Ui.row({"number" => item.number, "date" => fmt.date(item.invoice_date),
+                    "amount" => item.restricted ? "" : fmt.amount(item.total_amount),
                     "origin" => I18n.t(item.origin_key), "receipt" => item.receipt || "",
-                    "url" => Ui.route("accounting:entry", id: item.entry_id)})
+                    "url" => item.restricted ? nil : Ui.route("accounting:entry", id: item.entry_id)})
           end),
           "can_receive"    => can_receive && view.undecided?,
           "can_accept"     => can_receive && view.status == "received",

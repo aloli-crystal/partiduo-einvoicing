@@ -68,9 +68,22 @@ module Einvoicing
       cash!(invoice_id, Formats.decimal(event["amount"]?), paid_on, "payment:#{event["payment_id"]}", event.actor_user_id)
     end
 
+    # Statuts d'une facture émise que la plateforme connaît : déposée (ou en
+    # cours de contrôle), approuvée, refusée par le destinataire, encaissée.
+    # Ni « à transmettre » ni « rejetée » (213) : la plateforme ne l'a pas.
+    KNOWN_STATUSES = %w[submitted deposited approved refused paid]
+
+    # La plateforme connaît-elle la facture (dépôt accepté) ?
+    def self.deposited?(row : Transmission) : Bool
+      !row.platform_ref.to_s.empty? && KNOWN_STATUSES.includes?(row.status)
+    end
+
     # « Encaissée » (212), à émettre, sur une facture transmise (B2B) ou
-    # déclarée (B2C) ; l'envoi est tenté après la validation de l'opération,
-    # sinon à la synchronisation suivante.
+    # déclarée (B2C). Facture déjà déposée : statut « Encaissée » et envoi
+    # tenté après la validation de l'opération, sinon à la synchronisation
+    # suivante. Facture pas encore déposée (à transmettre, rejetée) : son
+    # statut ne change pas — elle reste à transmettre — et le 212 attend le
+    # dépôt (`send!`, D-EINV-020).
     def self.cash!(invoice_id : Int64, amount : BigDecimal?, paid_on : Time, origin : String, by : Int64?) : Nil
       row = Transmission.filter(invoice_id: invoice_id).first
       return if row.nil? || !row.route.in?("platform", "b2c") || row.kind == "credit_note"
@@ -79,11 +92,17 @@ module Einvoicing
       return unless value > 0
       created = Event.create!(transmission_id: row.id, code: "212", occurred_at: paid_on, issuer: "seller",
         amount: value, state: "to_send", origin: origin, created_by_id: by, created_at: Time.utc)
+      return unless deposited?(row)
+      mark_paid!(row)
+      event_id = created.id!.to_i64
+      Partiduo::Events.after_commit { send_later(event_id) }
+    end
+
+    private def self.mark_paid!(row : Transmission) : Nil
+      return if row.status == "refused"
       row.status = "paid"
       row.last_code = "212"
       row.save!
-      event_id = created.id!.to_i64
-      Partiduo::Events.after_commit { send_later(event_id) }
     end
 
     # Envoi immédiat d'un statut émis, sans bloquer l'opération d'origine :
@@ -98,22 +117,34 @@ module Einvoicing
       Log.warn { "statut #{event_id} non émis : #{ex.message}" }
     end
 
-    # Émet un statut `to_send` ou `failed` ; met à jour son état.
+    # Émet un statut `to_send` ou `failed` ; met à jour son état. Un statut
+    # sur une facture émise que la plateforme ne connaît pas encore reste
+    # `to_send`, sans erreur : il part après le dépôt. Sur une facture
+    # passée hors plateforme (canal changé), il est sans objet.
     def self.send!(event : Event, connector : Connector) : Bool
+      if transmission = event.transmission_id.try { |id| Transmission.filter(id: id).first }
+        unless transmission.route.in?("platform", "b2c")
+          event.state = "not_applicable"
+          event.save!
+          return false
+        end
+        return false unless deposited?(transmission)
+      end
       connector.send_status(connector_event(event))
       event.state = "sent"
       event.sent_at = Time.utc
       event.error = ""
       event.save!
+      transmission.try { |row| mark_paid!(row) if event.code == "212" && row.status != "paid" }
       true
     rescue ex : Unsupported
       event.state = "not_applicable"
-      event.error = ex.message.to_s
+      event.error = ex.text
       event.save!
       false
     rescue ex : ConnectorError
       event.state = "failed"
-      event.error = ex.message.to_s
+      event.error = ex.text
       event.save!
       false
     end
@@ -134,7 +165,7 @@ module Einvoicing
           reason_code: event.reason_code.to_s, reason: event.reason.to_s, amount: event.amount,
           currency_code: transmission.currency_code.to_s, seller: company, buyer: buyer)
       else
-        reception = Reception.filter(id: event.reception_id).first || raise ConnectorError.new("événement sans facture")
+        reception = Reception.filter(id: event.reception_id).first || raise ConnectorError.new("événement sans facture", nil, "einvoicing.errors.transport.orphan_event", {} of String => String)
         seller = Connector::Party.new(name: reception.supplier_name.to_s, siren: reception.supplier_siren.to_s,
           vat_number: reception.supplier_vat.to_s, country_code: reception.supplier_country.to_s,
           electronic_address: reception.supplier_siren.to_s, scheme: Formats::SCHEME_FR_ADDR)
@@ -160,16 +191,41 @@ module Einvoicing
       end
     end
 
+    # Facture émise visée par un statut : par sa référence chez la
+    # plateforme ou son `tracking_id`, sinon par son numéro, départagé par
+    # la date et la nature ; ambiguïté : statut abandonné, avec une trace.
     private def self.find_transmission(event : Connector::LifecycleEvent) : Transmission?
       ref = event.invoice_ref
       found = ref.empty? ? nil : (Transmission.filter(platform_ref: ref).first || Transmission.filter(tracking_id: ref).first)
-      found || (event.invoice_number.empty? ? nil : Transmission.filter(number: event.invoice_number).first)
+      return found if found || event.invoice_number.empty?
+      candidates = Transmission.filter(number: event.invoice_number).to_a
+      if date = event.invoice_date
+        candidates.select! { |row| row.issue_date.nil? || row.issue_date.try(&.to_s("%Y-%m-%d")) == date.to_s("%Y-%m-%d") }
+      end
+      candidates.select! { |row| row.type_code == event.type_code } if candidates.size > 1
+      single(candidates, "facture émise", event)
     end
 
+    # Facture reçue visée par un statut : par sa référence chez la
+    # plateforme, sinon par son numéro *et* le SIREN du vendeur (un numéro
+    # n'est unique que chez un même fournisseur) ; sans SIREN ou ambiguïté :
+    # statut abandonné, avec une trace.
     private def self.find_reception(event : Connector::LifecycleEvent) : Reception?
       ref = event.invoice_ref
       found = ref.empty? ? nil : Reception.filter(platform_ref: ref).first
-      found || (event.invoice_number.empty? ? nil : Reception.filter(number: event.invoice_number).first)
+      return found if found || event.invoice_number.empty?
+      siren = event.seller.try(&.siren).to_s
+      if siren.empty?
+        Log.warn { "statut #{event.code} de la facture reçue #{event.invoice_number} ignoré : vendeur sans SIREN" }
+        return
+      end
+      single(Reception.filter(number: event.invoice_number, supplier_siren: siren).to_a, "facture reçue", event)
+    end
+
+    private def self.single(candidates : Array(T), label : String, event : Connector::LifecycleEvent) : T? forall T
+      return candidates.first if candidates.size == 1
+      Log.warn { "statut #{event.code} de la #{label} #{event.invoice_number} ignoré : #{candidates.size} factures possibles" } if candidates.size > 1
+      nil
     end
 
     private def self.customer(id : Int64) : Connector::Party?
@@ -194,7 +250,7 @@ module Einvoicing
     def self.view(event : Event) : Api::EventView
       Api::EventView.new(id: event.id!.to_i64, code: event.code!, occurred_at: event.occurred_at!, issuer: event.issuer!,
         reason_code: event.reason_code || "", reason: event.reason || "", amount: event.amount, state: event.state!,
-        sent_at: event.sent_at, error: event.error || "")
+        sent_at: event.sent_at, error: ErrorText.translate(event.error || ""))
     end
 
     Log = ::Log.for("einvoicing")

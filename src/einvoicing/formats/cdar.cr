@@ -76,7 +76,10 @@ module Einvoicing
         issuer : String,
         reason_code : String,
         reason : String,
-        amount : BigDecimal?
+        amount : BigDecimal?,
+        type_code : String = "380",
+        invoice_date : Time? = nil,
+        seller_siren : String = ""
 
       def self.parse(bytes : Bytes) : Array(Status)
         doc = XML.parse(String.new(bytes))
@@ -94,6 +97,9 @@ module Einvoicing
             issuer: issuer, reason_code: text.call("ram:SpecifiedDocumentStatus/ram:ReasonCode", node),
             reason: text.call("ram:SpecifiedDocumentStatus/ram:Reason", node),
             amount: Formats.decimal(text.call("ram:SpecifiedDocumentStatus/ram:SpecifiedDocumentCharacteristic/ram:ValueAmount", node)),
+            type_code: text.call("ram:TypeCode", node).presence || "380",
+            invoice_date: Formats.date(text.call("ram:FormattedIssueDateTime/qdt:DateTimeString", node)),
+            seller_siren: text.call("ram:IssuerTradeParty/ram:GlobalID", node),
           )
         end
       rescue XML::Error

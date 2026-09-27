@@ -91,6 +91,24 @@ nl:
       AUTRE: "Andere reden"
     receipt_note: "Ontvangen elektronische factuur (%{syntax})"
     errors:
+      sync:
+        invoice: "Factuur %{number}: %{detail}"
+        running: "Er loopt al een synchronisatie of verzending: probeer het zo dadelijk opnieuw."
+      transport:
+        raw: "%{detail}"
+        json: "Onleesbaar antwoord van het platform (%{status}): %{detail}"
+        https: "Niet-HTTPS-adres geweigerd: %{url}"
+        unreachable: "%{host} onbereikbaar: %{detail}"
+        unavailable: "Platform niet beschikbaar (%{status})."
+        status_rejected: "Status geweigerd door het platform: %{detail}"
+        ereporting_rejected: "E-reporting geweigerd door het platform: %{detail}"
+        no_directory: "Het gekoppelde platform biedt geen adresboek."
+        missing_field: "Onvolledig antwoord van het platform (%{field} ontbreekt)."
+        platform: "Het platform antwoordde %{status}: %{detail}"
+        auth_refused: "Authenticatie geweigerd door het platform (%{status})."
+        no_statuses: "Het toegangspunt wisselt geen statussen uit."
+        no_ereporting: "Geen e-reporting via dit toegangspunt."
+        orphan_event: "Status zonder factuur."
       connection:
         adapter:
           unknown: "Onbekende adapter: %{value}."
@@ -103,10 +121,15 @@ nl:
         failed: "Het platform antwoordt niet zoals verwacht: %{detail}"
         missing: "Er is geen erkend platform gekoppeld."
       transmission:
+        internal: "Interne fout tijdens de verzending: %{detail}"
+        format: "Factuurbestand niet aangemaakt: %{detail}"
         not_issued: "Dit document is geen uitgegeven factuur."
         not_transmittable: "Deze factuur kan in haar huidige toestand niet worden verzonden (%{status})."
         failed: "Verzending mislukt: %{detail}"
       reception:
+        vat_rate_unknown: "Geen btw-tarief van het dossier komt overeen met het tarief %{category} %{percent} % van de factuur: voeg het toe aan de btw-tarieven vóór de voorboeking."
+        vat_rates_unreadable: "U kunt de btw-tarieven van het dossier niet lezen: de btw %{category} %{percent} % van de factuur kan niet worden overgenomen."
+        total_mismatch: "De voorgestelde boeking bedraagt %{total} in plaats van %{expected} (factuurbedrag incl. btw): ze wordt niet voorgeboekt, controleer de factuur."
         unreadable: "Noch UBL, noch CII, noch Factur-X: bestand niet herkend."
         reason_code: "Onbekende weigeringsreden: %{value}."
         reason_blank: "Vermeld de reden van de weigering."

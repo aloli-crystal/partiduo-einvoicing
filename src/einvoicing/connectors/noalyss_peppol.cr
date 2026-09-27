@@ -100,11 +100,11 @@ module Einvoicing
       end
 
       def send_status(event : LifecycleEvent) : Nil
-        raise Unsupported.new("le point d'accès NOALYSS-PEPPOL n'échange pas de statuts")
+        raise Unsupported.new("le point d'accès NOALYSS-PEPPOL n'échange pas de statuts", key: "einvoicing.errors.transport.no_statuses")
       end
 
       def send_ereporting(batch : EReportingBatch) : Nil
-        raise Unsupported.new("pas d'e-reporting par le point d'accès NOALYSS-PEPPOL")
+        raise Unsupported.new("pas d'e-reporting par le point d'accès NOALYSS-PEPPOL", key: "einvoicing.errors.transport.no_ereporting")
       end
 
       private def url(path : String) : String
@@ -134,18 +134,18 @@ module Einvoicing
         response = Http.exec("POST", url("/cnx2"), {"Noalyss-Authz" => settings["token"],
                                                     "Content-Type"  => "application/x-www-form-urlencoded"},
           Http.form({"participantId" => settings["participant_id"], "userId" => settings["user_id"]}))
-        raise ConnectorError.new("connexion refusée (#{response.status})", response.status) unless response.success?
+        raise ConnectorError.new("connexion refusée (#{response.status})", response.status, "einvoicing.errors.transport.auth_refused", {"status" => response.status.to_s}) unless response.success?
         json = response.json
-        raise ConnectorError.new("données de connexion invalides") unless json["transfer"]?
+        raise ConnectorError.new("données de connexion invalides", nil, "einvoicing.errors.transport.missing_field", {"field" => "transfer"}) unless json["transfer"]?
         authorization = json["authorization"]?.try(&.as_s?) || json["autorization"]?.try(&.as_s?) ||
-                        raise ConnectorError.new("réponse de connexion sans jeton")
+                        raise ConnectorError.new("réponse de connexion sans jeton", nil, "einvoicing.errors.transport.missing_field", {"field" => "authorization"})
         settings.store_tokens(authorization, Time.utc + SESSION)
         authorization
       end
 
       private def ensure_success!(response : Http::Response) : Nil
         return if response.success?
-        raise ConnectorError.new("point d'accès : #{response.status} #{response.text[0, 200]}".strip, response.status)
+        raise ConnectorError.new("point d'accès : #{response.status} #{response.text[0, 200]}".strip, response.status, "einvoicing.errors.transport.platform", {"status" => response.status.to_s, "detail" => response.text[0, 200]})
       end
 
       # `date_received` au format de l'amont (`DD.MM.YYYY HH24:MI:SS`) ou ISO.

@@ -44,10 +44,10 @@ module Einvoicing
           connector.send_ereporting(batch)
           {"sent", ""}
         rescue ex : Unsupported
-          {"not_applicable", ex.message.to_s}
+          {"not_applicable", ex.text}
         rescue ex : ConnectorError
-          errors << ex.message.to_s
-          {"failed", ex.message.to_s}
+          errors << ex.text
+          {"failed", ex.text}
         end
         ids = group.map(&.id!.to_i64)
         Report.filter(id__in: ids).update(state: state, error: error, batch_ref: batch_ref,

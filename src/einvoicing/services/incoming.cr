@@ -158,17 +158,10 @@ module Einvoicing
       errors << FieldError.new("base", "einvoicing.errors.reception.no_file") if receipt.nil?
       return {nil, errors} unless errors.empty? && ledger && card && receipt
 
-      sign = view.credit_note? ? -1 : 1
-      rates = actor.can?("vat.rate.read") ? Partiduo::Api::Vat.rates(actor) : [] of Partiduo::Api::Vat::RateView
       label = [view.supplier_name, view.number].reject(&.empty?).join(" · ")
-      lines = view.vat_lines.map do |vat|
-        rate = match_rate(rates, vat.category, vat.percent)
-        Acc::DocumentLineInput.new(amount: vat.base * sign, vat_rate: rate.try(&.code),
-          vat_amount: rate ? vat.amount * sign : nil, label: label)
-      end
-      if lines.empty?
-        lines << Acc::DocumentLineInput.new(amount: (view.total_net || view.total_gross || BigDecimal.new(0)) * sign, label: label)
-      end
+      lines = proposed_lines(actor, view, label, errors)
+      check_total(view, lines, errors)
+      return {nil, errors} unless errors.empty?
       document = Acc::DocumentInput.new(
         ledger_id: ledger.id, date: view.issue_date || Partiduo::Api::Core.today, third_party: card.code,
         lines: lines, label: label, due_date: view.due_date,
@@ -177,6 +170,41 @@ module Einvoicing
       )
       {Acc::ReceivedInvoiceInput.new(document: document, number: view.number, invoice_date: view.issue_date,
         origin: Acc::ReceptionOrigin::Platform, platform_reference: cut(view.platform_ref, 255)), errors}
+    end
+
+    # Une ligne par taux du récapitulatif de TVA (signée pour un avoir). TVA
+    # facturée sans taux du dossier correspondant (ou taux illisibles) :
+    # l'écriture perdrait la TVA déductible — refus (DECISIONS D-EINV-025).
+    private def self.proposed_lines(actor : Partiduo::Api::Actor, view : Api::ReceptionView, label : String,
+                                    errors : Array(FieldError)) : Array(Acc::DocumentLineInput)
+      sign = view.credit_note? ? -1 : 1
+      readable = actor.can?("vat.rate.read")
+      rates = readable ? Partiduo::Api::Vat.rates(actor) : [] of Partiduo::Api::Vat::RateView
+      key = readable ? "einvoicing.errors.reception.vat_rate_unknown" : "einvoicing.errors.reception.vat_rates_unreadable"
+      lines = view.vat_lines.map do |vat|
+        rate = match_rate(rates, vat.category, vat.percent)
+        if rate.nil? && !vat.amount.zero?
+          errors << FieldError.new("vat", key, {"category" => vat.category, "percent" => Formats.plain(vat.percent)})
+        end
+        Acc::DocumentLineInput.new(amount: vat.base * sign, vat_rate: rate.try(&.code),
+          vat_amount: rate ? vat.amount * sign : nil, label: label)
+      end
+      if lines.empty?
+        lines << Acc::DocumentLineInput.new(amount: (view.total_net || view.total_gross || BigDecimal.new(0)) * sign, label: label)
+      end
+      lines
+    end
+
+    # L'écriture proposée doit totaliser le TTC de la facture, au centime.
+    private def self.check_total(view : Api::ReceptionView, lines : Array(Acc::DocumentLineInput),
+                                 errors : Array(FieldError)) : Nil
+      gross = view.total_gross
+      return unless errors.empty? && gross
+      sign = view.credit_note? ? -1 : 1
+      total = lines.sum(BigDecimal.new(0)) { |line| line.amount + (line.vat_amount || BigDecimal.new(0)) } * sign
+      return if total.round(2, mode: :ties_away) == gross.round(2, mode: :ties_away)
+      errors << FieldError.new("total", "einvoicing.errors.reception.total_mismatch",
+        {"total" => Formats.plain(total), "expected" => Formats.plain(gross)})
     end
 
     # Taux du dossier de même catégorie et même pourcentage (hors

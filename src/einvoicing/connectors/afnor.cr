@@ -55,7 +55,7 @@ module Einvoicing
 
       def check : Nil
         response = call("GET", flow_url("/v1/healthcheck"))
-        raise ConnectorError.new("plateforme indisponible (#{response.status})", response.status) unless response.success?
+        raise ConnectorError.new("plateforme indisponible (#{response.status})", response.status, "einvoicing.errors.transport.unavailable", {"status" => response.status.to_s}) unless response.success?
       end
 
       def submit(invoice : OutgoingInvoice) : Submission
@@ -105,8 +105,10 @@ module Einvoicing
             Formats::Cdar.parse(download(id)).each_with_index do |status, index|
               events << LifecycleEvent.new(code: status.code, occurred_at: status.occurred_at,
                 direction: type == "CustomerInvoiceLC" ? "outgoing" : "incoming",
-                invoice_number: status.invoice_number, issuer: status.issuer, reason_code: status.reason_code,
-                reason: status.reason, amount: status.amount, platform_ref: "#{id}:#{index}")
+                invoice_number: status.invoice_number, invoice_date: status.invoice_date, type_code: status.type_code,
+                issuer: status.issuer, reason_code: status.reason_code, reason: status.reason, amount: status.amount,
+                platform_ref: "#{id}:#{index}",
+                seller: status.seller_siren.empty? ? nil : Party.new(name: "", siren: status.seller_siren))
             end
           end
         end
@@ -120,7 +122,7 @@ module Einvoicing
                 "sha256" => Digest::SHA256.hexdigest(xml)}
         body = post_flow(info, "#{id}.xml", "application/xml", xml)
         result = submission(body)
-        raise ConnectorError.new("statut rejeté : #{result.reason}") if result.status == "error"
+        raise ConnectorError.new("statut rejeté : #{result.reason}", nil, "einvoicing.errors.transport.status_rejected", {"detail" => result.reason}) if result.status == "error"
       end
 
       def send_ereporting(batch : EReportingBatch) : Nil
@@ -128,12 +130,12 @@ module Einvoicing
         info = {"flowSyntax" => "FRR", "name" => "#{batch.tracking_id}.xml", "trackingId" => batch.tracking_id,
                 "processingRule" => "B2BInt", "sha256" => Digest::SHA256.hexdigest(xml)}
         result = submission(post_flow(info, "#{batch.tracking_id}.xml", "application/xml", xml))
-        raise ConnectorError.new("e-reporting rejeté : #{result.reason}") if result.status == "error"
+        raise ConnectorError.new("e-reporting rejeté : #{result.reason}", nil, "einvoicing.errors.transport.ereporting_rejected", {"detail" => result.reason}) if result.status == "error"
       end
 
       def lookup(query : String) : Array(DirectoryEntry)
         base = settings["directory_url"]
-        raise Unsupported.new("adresse de l'API Annuaire non renseignée") if base.empty?
+        raise Unsupported.new("adresse de l'API Annuaire non renseignée", key: "einvoicing.errors.transport.no_directory") if base.empty?
         value = query.gsub(/\s/, "")
         filters = if value.matches?(/\A\d{9}\z/)
                     {"siren" => {"op" => "strict", "value" => value}}
@@ -171,7 +173,7 @@ module Einvoicing
       end
 
       private def submission(body : JSON::Any) : Submission
-        id = body["flowId"]?.try(&.as_s?) || raise ConnectorError.new("réponse de dépôt sans flowId")
+        id = body["flowId"]?.try(&.as_s?) || raise ConnectorError.new("réponse de dépôt sans flowId", nil, "einvoicing.errors.transport.missing_field", {"field" => "flowId"})
         ack = body["acknowledgement"]?
         status = ack.try(&.["status"]?.try(&.as_s?)) || "Pending"
         detail = ack.try(&.["details"]?.try(&.as_a?.try(&.first?)))
@@ -240,7 +242,7 @@ module Einvoicing
         rescue ConnectorError
           response.text[0, 200]
         end
-        raise ConnectorError.new("plateforme : #{response.status} #{detail}".strip, response.status)
+        raise ConnectorError.new("plateforme : #{response.status} #{detail}".strip, response.status, "einvoicing.errors.transport.platform", {"status" => response.status.to_s, "detail" => detail})
       end
 
       # Jeton d'accès OAuth 2 : celui conservé s'il est valable, sinon
@@ -265,9 +267,9 @@ module Einvoicing
           response = Http.exec("POST", settings["token_url"], {"Content-Type" => "application/x-www-form-urlencoded",
                                                                "Accept"       => "application/json"}, Http.form(fields))
         end
-        raise ConnectorError.new("authentification refusée (#{response.status})", response.status) unless response.success?
+        raise ConnectorError.new("authentification refusée (#{response.status})", response.status, "einvoicing.errors.transport.auth_refused", {"status" => response.status.to_s}) unless response.success?
         json = response.json
-        access = json["access_token"]?.try(&.as_s?) || raise ConnectorError.new("réponse OAuth sans access_token")
+        access = json["access_token"]?.try(&.as_s?) || raise ConnectorError.new("réponse OAuth sans access_token", nil, "einvoicing.errors.transport.missing_field", {"field" => "access_token"})
         expires = json["expires_in"]?.try { |value| value.as_i64? || value.as_s?.try(&.to_i64?) }
         settings.store_tokens(access, Time.utc + (expires || 1800_i64).seconds, json["refresh_token"]?.try(&.as_s?))
         access

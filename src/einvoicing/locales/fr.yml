@@ -91,6 +91,24 @@ fr:
       AUTRE: "Autre motif"
     receipt_note: "Facture électronique reçue (%{syntax})"
     errors:
+      sync:
+        invoice: "Facture %{number} : %{detail}"
+        running: "Une synchronisation ou une transmission est déjà en cours : réessayez dans un instant."
+      transport:
+        raw: "%{detail}"
+        json: "Réponse illisible de la plateforme (%{status}) : %{detail}"
+        https: "Adresse non HTTPS refusée : %{url}"
+        unreachable: "%{host} injoignable : %{detail}"
+        unavailable: "Plateforme indisponible (%{status})."
+        status_rejected: "Statut refusé par la plateforme : %{detail}"
+        ereporting_rejected: "E-reporting refusé par la plateforme : %{detail}"
+        no_directory: "La plateforme raccordée ne propose pas d'annuaire."
+        missing_field: "Réponse de la plateforme incomplète (%{field} absent)."
+        platform: "La plateforme a répondu %{status} : %{detail}"
+        auth_refused: "Authentification refusée par la plateforme (%{status})."
+        no_statuses: "Le point d'accès n'échange pas de statuts."
+        no_ereporting: "Pas d'e-reporting par ce point d'accès."
+        orphan_event: "Statut sans facture."
       connection:
         adapter:
           unknown: "Adaptateur inconnu : %{value}."
@@ -103,10 +121,15 @@ fr:
         failed: "La plateforme ne répond pas comme attendu : %{detail}"
         missing: "Aucune plateforme agréée n'est raccordée."
       transmission:
+        internal: "Erreur interne pendant la transmission : %{detail}"
+        format: "Fichier de la facture non produit : %{detail}"
         not_issued: "Ce document n'est pas une facture émise."
         not_transmittable: "Cette facture ne se transmet pas dans son état actuel (%{status})."
         failed: "Transmission échouée : %{detail}"
       reception:
+        vat_rate_unknown: "Aucun taux de TVA du dossier ne correspond au taux %{category} %{percent} % de la facture : ajoutez-le aux taux de TVA avant de pré-comptabiliser."
+        vat_rates_unreadable: "Les taux de TVA du dossier ne vous sont pas lisibles : la TVA %{category} %{percent} % de la facture ne peut pas être reprise."
+        total_mismatch: "L'écriture proposée totalise %{total} au lieu de %{expected} (TTC de la facture) : elle n'est pas pré-comptabilisée, vérifiez la facture."
         unreadable: "Ni UBL, ni CII, ni Factur-X : fichier non reconnu."
         reason_code: "Motif de refus inconnu : %{value}."
         reason_blank: "Précisez le motif du refus."

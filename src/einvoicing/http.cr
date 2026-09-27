@@ -38,7 +38,8 @@ module Einvoicing
       def json : JSON::Any
         JSON.parse(text)
       rescue ex : JSON::ParseException
-        raise ConnectorError.new("réponse JSON illisible (#{status}) : #{ex.message}", status)
+        raise ConnectorError.new("réponse JSON illisible (#{status}) : #{ex.message}", status,
+          "einvoicing.errors.transport.json", {"status" => status.to_s, "detail" => ex.message.to_s})
       end
     end
 
@@ -56,7 +57,10 @@ module Einvoicing
 
       def exec(request : Request) : Response
         uri = URI.parse(request.url)
-        raise ConnectorError.new("adresse non HTTPS refusée : #{request.url}") unless uri.scheme == "https"
+        unless uri.scheme == "https"
+          raise ConnectorError.new("adresse non HTTPS refusée : #{request.url}", nil, "einvoicing.errors.transport.https",
+            {"url" => request.url})
+        end
         client = HTTP::Client.new(uri, tls: NetTransport.tls_context)
         client.connect_timeout = TIMEOUT
         client.read_timeout = TIMEOUT
@@ -68,7 +72,8 @@ module Einvoicing
         response.headers.each { |name, values| result[name.downcase] = values.join(", ") }
         Response.new(response.status_code, result, response.body.to_slice)
       rescue ex : IO::Error | Socket::Error | OpenSSL::Error
-        raise ConnectorError.new("#{uri.try(&.host)} injoignable : #{ex.message}")
+        raise ConnectorError.new("#{uri.try(&.host)} injoignable : #{ex.message}", nil,
+          "einvoicing.errors.transport.unreachable", {"host" => uri.try(&.host).to_s, "detail" => ex.message.to_s})
       ensure
         client.try(&.close)
       end
