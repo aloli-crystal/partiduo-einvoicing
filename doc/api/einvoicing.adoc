@@ -43,10 +43,15 @@ Api.disconnect(actor) : Result(Nil)
 * `AdapterView` : `code` (`AFNOR`, `NOALYSS_PEPPOL`…), `label_key`,
   `available` (régime du dossier), `fields` (`FieldView` : `name`, `secret`,
   `required`, `kind` `url`/`text`/`choice`, `choices`, `value` — vide pour
-  un secret —, `stored`).
+  un secret —, `stored`, `label_key` — `einvoicing.fields.<nom>` sauf si
+  l'adaptateur déclare le sien (`Connections::Field` `label:`) —,
+  `choice_prefix` et `choice_key(choix)` — `einvoicing.modes.<choix>` par
+  défaut —).
 * `configure` enregistre les paramètres et rend l'adaptateur *seul actif*
   (index unique partiel en base). Secrets chiffrés ; un secret laissé vide
-  garde la valeur enregistrée ; les jetons en cours sont oubliés. Erreurs :
+  garde la valeur enregistrée, sauf si une adresse (`url`) change : chaque
+secret enregistré doit alors être saisi à nouveau
+(`connection.field.secret_reentry`) ; les jetons en cours sont oubliés. Erreurs :
   `connection.adapter.unknown`, `.adapter.regime`, `.field.blank`,
   `.field.https` (toute adresse doit être HTTPS), `.field.choice`,
   `.field.too_long`.
@@ -81,7 +86,8 @@ redéfinit que ses méthodes protégées :
 |`request_url(url, request_id)` |Adresse appelée pour la requête d'identifiant `Request-Id` (inchangée).
 |`download_accept` |Type accepté au téléchargement d'un flux (`application/json`).
 |`page_limit` |Flux demandés par page de recherche (50).
-|`more_without_cursor?(body, results)` |Réponse sans `nextCursor` qui annonce d'autres flux : la page suivante se lit après le dernier flux lu, sans recouvrement (non).
+|`more_without_cursor?(body, results)` |Réponse sans `nextCursor` qui annonce d'autres flux (non). La recherche est alors relue d'un seul appel avec `limit = total` (ordre des flux non garanti), puis triée par `updatedAt` croissant.
+|`full_read_limit` |Plafond de cette relecture complète (0 : aucune). Au-delà, la page suivante part du dernier flux lu moins une seconde et la lecture s'arrête dès qu'une page ne fait plus avancer ce point.
 |`authenticate` |Nouveau jeton d'accès, enregistré chiffré (OAuth 2 : rafraîchissement, puis _client credentials_).
 |===
 

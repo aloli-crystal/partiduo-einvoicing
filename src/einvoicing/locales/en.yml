@@ -118,6 +118,7 @@ en:
           https: "HTTPS address expected: %{value}."
           choice: "Value not allowed: %{value}."
           too_long: "%{max} characters at most."
+          secret_reentry: "Platform address changed: enter this secret again."
         failed: "The platform did not answer as expected: %{detail}"
         missing: "No accredited platform is connected."
       transmission:

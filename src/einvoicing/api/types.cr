@@ -34,9 +34,12 @@ module Einvoicing
       kind : String,
       choices : Array(String),
       value : String,
-      stored : Bool do
-      def label_key : String
-        "einvoicing.fields.#{name}"
+      stored : Bool,
+      label_key : String,
+      choice_prefix : String = "einvoicing.modes" do
+      # Clé du libellé d'un choix.
+      def choice_key(choice : String) : String
+        "#{choice_prefix}.#{choice}"
       end
     end
 

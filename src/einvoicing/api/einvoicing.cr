@@ -450,7 +450,7 @@ module Einvoicing
       adapter.fields.map do |field|
         stored = !(settings.try(&.secrets[field.name]?) || "").empty?
         FieldView.new(field.name, field.secret, field.required, field.kind, field.choices,
-          field.secret ? "" : (settings.try(&.values[field.name]?) || ""), stored)
+          field.secret ? "" : (settings.try(&.values[field.name]?) || ""), stored, field.label_key, field.choice_prefix)
       end
     end
 

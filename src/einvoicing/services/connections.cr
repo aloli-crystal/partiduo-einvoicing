@@ -11,12 +11,22 @@ module Einvoicing
 
     # Paramètre d'un adaptateur : nom, secret (chiffré en base, jamais
     # réaffiché), obligatoire, nature (`url` HTTPS, `text`, `choice`).
+    # Libellés : `label_key` (par défaut `einvoicing.fields.<nom>`) et, pour
+    # un choix, `<choice_prefix>.<choix>` (par défaut `einvoicing.modes`) ;
+    # une extension déclare ainsi les siens dans son propre espace
+    # (DECISIONS D-ESL-005).
     record Field,
       name : String,
       secret : Bool = false,
       required : Bool = true,
       kind : String = "text",
-      choices : Array(String) = [] of String
+      choices : Array(String) = [] of String,
+      label : String? = nil,
+      choice_prefix : String = "einvoicing.modes" do
+      def label_key : String
+        label || "einvoicing.fields.#{name}"
+      end
+    end
 
     # Adaptateur : code, clé du libellé, régimes admis (`fr`, `be`),
     # paramètres, constructeur du connecteur.
@@ -119,7 +129,9 @@ module Einvoicing
 
     # Contrôle des paramètres saisis pour `adapter` : champs obligatoires
     # (un secret déjà enregistré peut rester vide), adresses HTTPS, choix
-    # admis, régime du dossier.
+    # admis, régime du dossier. Un secret enregistré ne peut rester vide si
+    # une adresse change : il partirait vers une adresse que celui qui l'a
+    # saisi n'a pas choisie (DECISIONS D-ESL-004).
     def self.check(adapter : Adapter?, code : String, values : Hash(String, String), existing : Connection?,
                    regime : String, errors : Array(FieldError)) : Nil
       if adapter.nil?
@@ -153,6 +165,27 @@ module Einvoicing
         if value.size > 2000
           errors << FieldError.new(field.name, "einvoicing.errors.connection.field.too_long", {"max" => "2000"})
         end
+      end
+      require_secrets_on_new_address(adapter, values, existing, stored, errors)
+    end
+
+    # Adresse nouvelle (non vide, admise, différente de celle enregistrée) :
+    # chaque secret enregistré laissé vide doit être saisi à nouveau.
+    private def self.require_secrets_on_new_address(adapter : Adapter, values : Hash(String, String),
+                                                    existing : Connection?, stored : Hash(String, String),
+                                                    errors : Array(FieldError)) : Nil
+      return if existing.nil? || stored.empty?
+      previous = existing.settings.try(&.as_h?) || {} of String => JSON::Any
+      moved = adapter.fields.any? do |field|
+        value = values[field.name]?.to_s.strip
+        field.kind == "url" && !field.secret && !value.empty? && value != (previous[field.name]?.try(&.as_s?) || "") &&
+          errors.none? { |error| error.field == field.name }
+      end
+      return unless moved
+      adapter.fields.each do |field|
+        next if !field.secret || !values[field.name]?.to_s.strip.empty? || stored[field.name]?.to_s.empty?
+        next if errors.any? { |error| error.field == field.name }
+        errors << FieldError.new(field.name, "einvoicing.errors.connection.field.secret_reentry")
       end
     end
   end

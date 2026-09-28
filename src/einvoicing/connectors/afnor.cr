@@ -31,7 +31,10 @@ module Einvoicing
     class Afnor < Connector
       CODE    = "AFNOR"
       OVERLAP = 10.minutes
-      LIMIT   = 50
+      # Recul de la page suivante d'une recherche sans curseur : couvre une
+      # comparaison `updatedAfter` stricte ou tronquée à la seconde.
+      CURSORLESS_MARGIN = 1.second
+      LIMIT             = 50
 
       # Profils XP Z12-013 (`FlowProfile`).
       PROFILES = {"EN16931" => "CIUS", "EXTENDED-CTC-FR" => "Extended-CTC-FR", "BASIC-WL" => "Basic"}
@@ -198,11 +201,18 @@ module Einvoicing
       end
 
       # Réponse de recherche sans `nextCursor` : la plateforme annonce-t-elle
-      # d'autres flux (total supérieur à la page) ? La page suivante se lit
-      # alors par date de mise à jour, sans recouvrement, à partir du
-      # dernier flux lu.
+      # d'autres flux (total supérieur à la page) ? La recherche est alors
+      # relue en entier (`full_read_limit`) ou, au-delà, par date de mise à
+      # jour à partir du dernier flux lu (voir `search`).
       protected def more_without_cursor?(body : JSON::Any, results : Array(JSON::Any)) : Bool
         false
+      end
+
+      # Réponse sans `nextCursor` déclarée incomplète : nombre de flux au
+      # plus relus d'un seul appel (`limit = total`) avant de se résoudre à
+      # paginer par date. 0 : jamais.
+      protected def full_read_limit : Int32
+        0
       end
 
       # Obtient un nouveau jeton d'accès, l'enregistre (chiffré) et le rend :
@@ -254,36 +264,84 @@ module Einvoicing
       end
 
       # Recherche paginée de flux à partir du curseur conservé : rend les
-      # flux, le curseur à conserver et s'il reste des pages.
+      # flux (triés par `updatedAt` croissant), le curseur à conserver et
+      # s'il reste des pages.
+      #
+      # Sans `nextCursor`, l'ordre des flux rendus n'est pas garanti
+      # (PDPConnectFR retrie lui-même) : avancer par le plus grand
+      # `updatedAt` d'une page partielle sauterait les flux plus anciens non
+      # rendus. Une réponse que l'adaptateur déclare incomplète
+      # (`more_without_cursor?`) est donc relue d'un seul appel avec
+      # `limit = total` (au plus `full_read_limit`) ; au-delà, la page
+      # suivante part du dernier flux lu moins `CURSORLESS_MARGIN`
+      # (l'enregistrement idempotent écarte les doublons) et la lecture
+      # s'arrête dès qu'une page ne fait plus avancer ce point
+      # (DECISIONS D-ESL-002).
       private def search(filters : Hash(String, Array(String)), after : Cursor?) : {Array(JSON::Any), Cursor?, Bool}
         state = after.try { |cursor| JSON.parse(cursor.value).as_h? } || {} of String => JSON::Any
-        where = JSON.parse(filters.to_json).as_h
-        request = {} of String => JSON::Any
-        if next_cursor = state["c"]?.try(&.as_s?)
-          request["cursor"] = JSON::Any.new(next_cursor)
-        elsif last = state["t"]?.try(&.as_s?).try { |text| Time.parse_rfc3339(text) rescue nil }
-          # Suite d'une lecture sans curseur (`p`) : exactement après le
-          # dernier flux lu ; nouvelle synchronisation : avec recouvrement.
-          where["updatedAfter"] = JSON::Any.new((state["p"]? ? last : last - OVERLAP).to_rfc3339(fraction_digits: 3))
-        end
-        request["where"] = JSON::Any.new(where)
-        request["limit"] = JSON::Any.new(page_limit.to_i64)
-        response = call("POST", flow_url("/v1/flows/search"), request.to_json.to_slice, "application/json")
-        ensure_success!(response)
-        body = response.json
-        results = body["results"]?.try(&.as_a?) || [] of JSON::Any
-        latest = results.compact_map { |flow| time_of(flow["updatedAt"]?) }.max? ||
-                 state["t"]?.try(&.as_s?).try { |text| Time.parse_rfc3339(text) rescue nil }
+        previous = state["t"]?.try(&.as_s?).try { |text| Time.parse_rfc3339(text) rescue nil }
+        continued = state.has_key?("p")
+        request = search_query(filters, state["c"]?.try(&.as_s?), previous, continued)
+        body = search_request(request)
+        results = results_of(body)
         following = body["nextCursor"]?.try(&.as_s?).presence
+        incomplete = following.nil? && !results.empty? && more_without_cursor?(body, results)
+        results, incomplete = read_whole(request, body, results) if incomplete
+        results = results.sort_by { |flow| time_of(flow["updatedAt"]?) || Time::UNIX_EPOCH }
+        latest = results.compact_map { |flow| time_of(flow["updatedAt"]?) }.max? || previous
         cursor = {} of String => String
         cursor["c"] = following if following
         cursor["t"] = latest.to_rfc3339(fraction_digits: 3) if latest
         more = !following.nil?
-        if !more && !results.empty? && latest && more_without_cursor?(body, results)
+        # Page sans curseur encore incomplète : on continue seulement si
+        # elle fait avancer le dernier flux lu (pas de relecture sans fin).
+        if incomplete && latest && (previous.nil? || !continued || latest > previous)
           cursor["p"] = "1"
           more = true
         end
         {results, cursor.empty? ? after : Cursor.new(cursor.to_json), more}
+      end
+
+      # Corps de la recherche : curseur de la plateforme s'il y en a un,
+      # sinon `updatedAfter` — juste avant le dernier flux lu pour la suite
+      # d'une lecture sans curseur, avec recouvrement pour une nouvelle
+      # synchronisation.
+      private def search_query(filters : Hash(String, Array(String)), next_cursor : String?, previous : Time?,
+                               continued : Bool) : Hash(String, JSON::Any)
+        where = JSON.parse(filters.to_json).as_h
+        request = {} of String => JSON::Any
+        if next_cursor
+          request["cursor"] = JSON::Any.new(next_cursor)
+        elsif previous
+          where["updatedAfter"] = JSON::Any.new((previous - (continued ? CURSORLESS_MARGIN : OVERLAP)).to_rfc3339(fraction_digits: 3))
+        end
+        request["where"] = JSON::Any.new(where)
+        request["limit"] = JSON::Any.new(page_limit.to_i64)
+        request
+      end
+
+      # Réponse sans curseur incomplète : relecture d'un seul appel avec
+      # `limit = total` (au plus `full_read_limit`) ; rend les flux et s'ils
+      # restent incomplets.
+      private def read_whole(request : Hash(String, JSON::Any), body : JSON::Any,
+                             results : Array(JSON::Any)) : {Array(JSON::Any), Bool}
+        total = body["total"]?.try { |value| value.as_i64? || value.as_s?.try(&.to_i64?) }
+        wanted = Math.min(total || 0_i64, full_read_limit.to_i64)
+        return {results, true} unless wanted > results.size
+        request["limit"] = JSON::Any.new(wanted)
+        body = search_request(request)
+        results = results_of(body)
+        {results, !results.empty? && more_without_cursor?(body, results)}
+      end
+
+      private def results_of(body : JSON::Any) : Array(JSON::Any)
+        body["results"]?.try(&.as_a?) || [] of JSON::Any
+      end
+
+      private def search_request(request : Hash(String, JSON::Any)) : JSON::Any
+        response = call("POST", flow_url("/v1/flows/search"), request.to_json.to_slice, "application/json")
+        ensure_success!(response)
+        response.json
       end
 
       private def download(id : String) : Bytes

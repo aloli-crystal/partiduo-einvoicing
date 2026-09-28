@@ -118,6 +118,7 @@ fr:
           https: "Adresse HTTPS attendue : %{value}."
           choice: "Valeur non admise : %{value}."
           too_long: "%{max} caractères au plus."
+          secret_reentry: "Adresse de la plateforme modifiée : saisissez à nouveau ce secret."
         failed: "La plateforme ne répond pas comme attendu : %{detail}"
         missing: "Aucune plateforme agréée n'est raccordée."
       transmission:

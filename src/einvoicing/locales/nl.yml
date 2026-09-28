@@ -118,6 +118,7 @@ nl:
           https: "HTTPS-adres verwacht: %{value}."
           choice: "Waarde niet toegelaten: %{value}."
           too_long: "Hoogstens %{max} tekens."
+          secret_reentry: "Platformadres gewijzigd: voer dit geheim opnieuw in."
         failed: "Het platform antwoordt niet zoals verwacht: %{detail}"
         missing: "Er is geen erkend platform gekoppeld."
       transmission:

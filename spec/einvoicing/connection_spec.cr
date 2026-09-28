@@ -67,6 +67,26 @@ describe "Raccordement à la plateforme agréée (ADR-004 D2, D6, D8)" do
     Einvoicing::Connection.filter(active: true).count.should eq(1)
   end
 
+  it "exige de ressaisir les secrets enregistrés quand une adresse change (D-ESL-004)" do
+    S.books
+    S.connect_afnor
+    moved = Api.configure(S.admin, Api::ConnectionInput.new("AFNOR", {
+      "flow_url" => "https://pa.test/afnor-flow", "token_url" => "https://ailleurs.test/oauth2/token",
+      "client_id" => S::SimulatedPlatform::CLIENT_ID, "client_secret" => "", "environment" => "sandbox",
+    }))
+    moved.failure?.should be_true
+    moved.errors.map { |error| {error.field, error.key} }.should eq([
+      {"client_secret", "einvoicing.errors.connection.field.secret_reentry"},
+    ])
+    Einvoicing::Connection.filter(adapter: "AFNOR").first!.settings.to_s.should_not contain("ailleurs.test")
+    # Secret saisi à nouveau : l'adresse est admise.
+    Api.configure(S.admin, Api::ConnectionInput.new("AFNOR", {
+      "flow_url" => "https://pa.test/afnor-flow", "token_url" => "https://ailleurs.test/oauth2/token",
+      "client_id" => S::SimulatedPlatform::CLIENT_ID, "client_secret" => S::SimulatedPlatform::CLIENT_SECRET,
+      "environment" => "sandbox",
+    })).success?.should be_true
+  end
+
   it "obtient le jeton OAuth, le conserve chiffré, le renouvelle sur un refus 401" do
     S.books
     S.connect_afnor

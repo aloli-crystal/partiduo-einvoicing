@@ -64,6 +64,10 @@ module Einvoicing
       # Recherche sans curseur : ni `nextCursor` ni décalage, `total` rendu
       # (plateforme qui s'écarte de la norme, adaptateur hérité).
       property? cursorless : Bool = false
+      # Ordre des flux d'une recherche sans curseur : "asc" (par `updatedAt`
+      # croissant), "desc" (les plus récents d'abord) ou "shuffled" (mêlés,
+      # graine fixe) — la norme ne garantit pas le tri (D-ESL-002).
+      property result_order : String = "asc"
       # Annuaire.
       property directory = [] of Hash(String, JSON::Any)
       # Point d'accès NOALYSS-PEPPOL.
@@ -194,6 +198,12 @@ module Einvoicing
           (types.nil? || types.includes?(flow.type)) && (directions.nil? || directions.includes?(flow.direction)) &&
             (after.nil? || flow.updated_at > after)
         end.sort_by! { |flow| {flow.updated_at, flow.id} }
+        if cursorless?
+          case result_order
+          when "desc"     then matching.reverse!
+          when "shuffled" then matching.shuffle!(Random.new(42))
+          end
+        end
         offset = cursorless? ? 0 : (body["cursor"]?.try(&.as_s.lchop("off:").to_i) || 0)
         limit = Math.min(body["limit"]?.try(&.as_i) || 25, page_size)
         page = matching[offset, limit]? || [] of Flow

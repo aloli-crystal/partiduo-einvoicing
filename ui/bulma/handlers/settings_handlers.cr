@@ -43,8 +43,8 @@ module Einvoicing
           end
           AdapterCard.new(adapter.code, I18n.t(adapter.label_key),
             !!connection.try { |item| item.adapter == adapter.code && item.active }, fields,
-            adapter.fields.select { |item| item.kind == "choice" }.flat_map(&.choices)
-              .map { |choice| Ui.row({"value" => choice, "label" => I18n.t("einvoicing.modes.#{choice}")}) })
+            adapter.fields.select { |item| item.kind == "choice" }
+              .flat_map { |item| item.choices.map { |choice| Ui.row({"value" => choice, "label" => I18n.t(item.choice_key(choice))}) } })
         end
         page("einvoicing/settings.html", {
           "title"      => I18n.t("einvoicing.menu.settings"),
