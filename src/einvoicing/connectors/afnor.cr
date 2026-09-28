@@ -21,6 +21,13 @@ module Einvoicing
     # alors l'horodatage du dernier flux lu ; la reprise relit avec un
     # recouvrement de dix minutes et l'enregistrement idempotent écarte les
     # flux déjà vus (DECISIONS D-EINV-005).
+    #
+    # *Points d'extension.* Une plateforme qui suit l'API Flux avec ses
+    # propres écarts (authentification, adresses, en-têtes : EsaLink,
+    # `partiduo-esalink`) hérite de cet adaptateur et ne redéfinit que les
+    # méthodes protégées de la section « Points d'extension » ; l'API Flux
+    # elle-même (dépôt, recherche, téléchargement, statuts CDAR,
+    # e-reporting, annuaire) n'est écrite qu'ici (DECISIONS D-ESL-002).
     class Afnor < Connector
       CODE    = "AFNOR"
       OVERLAP = 10.minutes
@@ -158,11 +165,75 @@ module Einvoicing
         end
       end
 
-      # --- Échanges --------------------------------------------------------------
+      # --- Points d'extension ----------------------------------------------------
 
-      private def flow_url(path : String) : String
+      # Adresse d'un chemin de l'API Flux (`/v1/flows`…).
+      protected def flow_url(path : String) : String
         "#{settings["flow_url"].rstrip('/')}#{path}"
       end
+
+      # En-têtes propres à la plateforme, ajoutés à chaque requête
+      # authentifiée.
+      protected def platform_headers : Hash(String, String)
+        headers = {} of String => String
+        organization = settings["organization_id"]
+        headers["Organization-Id"] = organization unless organization.empty?
+        headers
+      end
+
+      # Adresse effectivement appelée pour une requête d'identifiant
+      # `request_id` (en-tête `Request-Id`).
+      protected def request_url(url : String, request_id : String) : String
+        url
+      end
+
+      # Type accepté au téléchargement d'un flux (`GET /v1/flows/{flowId}`).
+      protected def download_accept : String
+        "application/json"
+      end
+
+      # Nombre de flux demandés par page de recherche.
+      protected def page_limit : Int32
+        LIMIT
+      end
+
+      # Réponse de recherche sans `nextCursor` : la plateforme annonce-t-elle
+      # d'autres flux (total supérieur à la page) ? La page suivante se lit
+      # alors par date de mise à jour, sans recouvrement, à partir du
+      # dernier flux lu.
+      protected def more_without_cursor?(body : JSON::Any, results : Array(JSON::Any)) : Bool
+        false
+      end
+
+      # Obtient un nouveau jeton d'accès, l'enregistre (chiffré) et le rend :
+      # OAuth 2, jeton de rafraîchissement s'il y en a un, sinon _client
+      # credentials_.
+      protected def authenticate : String
+        fields = if refresh = settings.refresh_token
+                   {"grant_type" => "refresh_token", "refresh_token" => refresh}
+                 else
+                   {"grant_type" => "client_credentials"}
+                 end
+        fields["client_id"] = settings["client_id"]
+        fields["client_secret"] = settings["client_secret"]
+        response = Http.exec("POST", settings["token_url"], {"Content-Type" => "application/x-www-form-urlencoded",
+                                                             "Accept"       => "application/json"}, Http.form(fields))
+        if !response.success? && fields["grant_type"] == "refresh_token"
+          settings.store_tokens("", Time.utc, "")
+          fields = {"grant_type" => "client_credentials", "client_id" => settings["client_id"],
+                    "client_secret" => settings["client_secret"]}
+          response = Http.exec("POST", settings["token_url"], {"Content-Type" => "application/x-www-form-urlencoded",
+                                                               "Accept"       => "application/json"}, Http.form(fields))
+        end
+        raise ConnectorError.new("authentification refusée (#{response.status})", response.status, "einvoicing.errors.transport.auth_refused", {"status" => response.status.to_s}) unless response.success?
+        json = response.json
+        access = json["access_token"]?.try(&.as_s?) || raise ConnectorError.new("réponse OAuth sans access_token", nil, "einvoicing.errors.transport.missing_field", {"field" => "access_token"})
+        expires = json["expires_in"]?.try { |value| value.as_i64? || value.as_s?.try(&.to_i64?) }
+        settings.store_tokens(access, Time.utc + (expires || 1800_i64).seconds, json["refresh_token"]?.try(&.as_s?))
+        access
+      end
+
+      # --- Échanges --------------------------------------------------------------
 
       private def post_flow(info : Hash(String, String), filename : String, content_type : String, content : Bytes) : JSON::Any
         body, type = Http.multipart([{"flowInfo", info.to_json, "application/json"}] of {String, String, String?},
@@ -191,10 +262,12 @@ module Einvoicing
         if next_cursor = state["c"]?.try(&.as_s?)
           request["cursor"] = JSON::Any.new(next_cursor)
         elsif last = state["t"]?.try(&.as_s?).try { |text| Time.parse_rfc3339(text) rescue nil }
-          where["updatedAfter"] = JSON::Any.new((last - OVERLAP).to_rfc3339)
+          # Suite d'une lecture sans curseur (`p`) : exactement après le
+          # dernier flux lu ; nouvelle synchronisation : avec recouvrement.
+          where["updatedAfter"] = JSON::Any.new((state["p"]? ? last : last - OVERLAP).to_rfc3339(fraction_digits: 3))
         end
         request["where"] = JSON::Any.new(where)
-        request["limit"] = JSON::Any.new(LIMIT.to_i64)
+        request["limit"] = JSON::Any.new(page_limit.to_i64)
         response = call("POST", flow_url("/v1/flows/search"), request.to_json.to_slice, "application/json")
         ensure_success!(response)
         body = response.json
@@ -204,12 +277,17 @@ module Einvoicing
         following = body["nextCursor"]?.try(&.as_s?).presence
         cursor = {} of String => String
         cursor["c"] = following if following
-        cursor["t"] = latest.to_rfc3339 if latest
-        {results, cursor.empty? ? after : Cursor.new(cursor.to_json), !following.nil?}
+        cursor["t"] = latest.to_rfc3339(fraction_digits: 3) if latest
+        more = !following.nil?
+        if !more && !results.empty? && latest && more_without_cursor?(body, results)
+          cursor["p"] = "1"
+          more = true
+        end
+        {results, cursor.empty? ? after : Cursor.new(cursor.to_json), more}
       end
 
       private def download(id : String) : Bytes
-        response = call("GET", flow_url("/v1/flows/#{URI.encode_path_segment(id)}?docType=Original"))
+        response = call("GET", flow_url("/v1/flows/#{URI.encode_path_segment(id)}?docType=Original"), accept: download_accept)
         ensure_success!(response)
         response.body
       end
@@ -219,22 +297,21 @@ module Einvoicing
       end
 
       # Requête authentifiée ; un 401 renouvelle le jeton et réessaie une fois.
-      private def call(method : String, url : String, body : Bytes? = nil, type : String? = nil,
-                       retry : Bool = true) : Http::Response
-        headers = {"Authorization" => "Bearer #{token}", "Accept" => "application/json",
-                   "Request-Id" => UUID.random.to_s}
+      protected def call(method : String, url : String, body : Bytes? = nil, type : String? = nil,
+                         retry : Bool = true, accept : String = "application/json") : Http::Response
+        request_id = UUID.random.to_s
+        headers = {"Authorization" => "Bearer #{token}", "Accept" => accept, "Request-Id" => request_id}
         headers["Content-Type"] = type if type
-        organization = settings["organization_id"]
-        headers["Organization-Id"] = organization unless organization.empty?
-        response = Http.exec(method, url, headers, body)
+        headers.merge!(platform_headers)
+        response = Http.exec(method, request_url(url, request_id), headers, body)
         if response.status == 401 && retry
           settings.clear_tokens
-          return call(method, url, body, type, retry: false)
+          return call(method, url, body, type, retry: false, accept: accept)
         end
         response
       end
 
-      private def ensure_success!(response : Http::Response) : Nil
+      protected def ensure_success!(response : Http::Response) : Nil
         return if response.success?
         detail = begin
           json = response.json
@@ -245,34 +322,10 @@ module Einvoicing
         raise ConnectorError.new("plateforme : #{response.status} #{detail}".strip, response.status, "einvoicing.errors.transport.platform", {"status" => response.status.to_s, "detail" => detail})
       end
 
-      # Jeton d'accès OAuth 2 : celui conservé s'il est valable, sinon
-      # rafraîchi ou redemandé (client credentials).
-      private def token : String
-        if current = settings.access_token
-          return current
-        end
-        fields = if refresh = settings.refresh_token
-                   {"grant_type" => "refresh_token", "refresh_token" => refresh}
-                 else
-                   {"grant_type" => "client_credentials"}
-                 end
-        fields["client_id"] = settings["client_id"]
-        fields["client_secret"] = settings["client_secret"]
-        response = Http.exec("POST", settings["token_url"], {"Content-Type" => "application/x-www-form-urlencoded",
-                                                             "Accept"       => "application/json"}, Http.form(fields))
-        if !response.success? && fields["grant_type"] == "refresh_token"
-          settings.store_tokens("", Time.utc, "")
-          fields = {"grant_type" => "client_credentials", "client_id" => settings["client_id"],
-                    "client_secret" => settings["client_secret"]}
-          response = Http.exec("POST", settings["token_url"], {"Content-Type" => "application/x-www-form-urlencoded",
-                                                               "Accept"       => "application/json"}, Http.form(fields))
-        end
-        raise ConnectorError.new("authentification refusée (#{response.status})", response.status, "einvoicing.errors.transport.auth_refused", {"status" => response.status.to_s}) unless response.success?
-        json = response.json
-        access = json["access_token"]?.try(&.as_s?) || raise ConnectorError.new("réponse OAuth sans access_token", nil, "einvoicing.errors.transport.missing_field", {"field" => "access_token"})
-        expires = json["expires_in"]?.try { |value| value.as_i64? || value.as_s?.try(&.to_i64?) }
-        settings.store_tokens(access, Time.utc + (expires || 1800_i64).seconds, json["refresh_token"]?.try(&.as_s?))
-        access
+      # Jeton d'accès : celui conservé s'il est valable, sinon un nouveau
+      # (`authenticate`).
+      protected def token : String
+        settings.access_token || authenticate
       end
     end
   end

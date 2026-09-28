@@ -66,6 +66,29 @@ Api.disconnect(actor) : Result(Nil)
 Régime `be`.
 |===
 
+=== Hériter de l'adaptateur XP Z12-013
+
+Une plateforme qui suit l'API Flux avec ses propres écarts (EsaLink,
+`partiduo-esalink`) hérite d'`Einvoicing::Connectors::Afnor` et ne
+redéfinit que ses méthodes protégées :
+
+[cols="1,3",options="header"]
+|===
+|Méthode |Rôle (comportement par défaut)
+
+|`flow_url(path)` |Adresse d'un chemin `/v1/…` de l'API Flux (`flow_url` + chemin).
+|`platform_headers` |En-têtes ajoutés à chaque requête authentifiée (`Organization-Id`).
+|`request_url(url, request_id)` |Adresse appelée pour la requête d'identifiant `Request-Id` (inchangée).
+|`download_accept` |Type accepté au téléchargement d'un flux (`application/json`).
+|`page_limit` |Flux demandés par page de recherche (50).
+|`more_without_cursor?(body, results)` |Réponse sans `nextCursor` qui annonce d'autres flux : la page suivante se lit après le dernier flux lu, sans recouvrement (non).
+|`authenticate` |Nouveau jeton d'accès, enregistré chiffré (OAuth 2 : rafraîchissement, puis _client credentials_).
+|===
+
+`call` (requête authentifiée, 401 : nouveau jeton et un seul nouvel essai),
+`token` et `ensure_success!` sont protégées aussi, pour l'adaptateur qui
+ajoute une requête propre à sa plateforme.
+
 == Synchronisation
 
 [source]

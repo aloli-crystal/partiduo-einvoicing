@@ -61,6 +61,9 @@ module Einvoicing
       property fail_next : Int32? = nil
       # Nombre de flux par page de recherche (petit, pour la pagination).
       property page_size : Int32 = 2
+      # Recherche sans curseur : ni `nextCursor` ni décalage, `total` rendu
+      # (plateforme qui s'écarte de la norme, adaptateur hérité).
+      property? cursorless : Bool = false
       # Annuaire.
       property directory = [] of Hash(String, JSON::Any)
       # Point d'accès NOALYSS-PEPPOL.
@@ -191,11 +194,15 @@ module Einvoicing
           (types.nil? || types.includes?(flow.type)) && (directions.nil? || directions.includes?(flow.direction)) &&
             (after.nil? || flow.updated_at > after)
         end.sort_by! { |flow| {flow.updated_at, flow.id} }
-        offset = body["cursor"]?.try(&.as_s.lchop("off:").to_i) || 0
+        offset = cursorless? ? 0 : (body["cursor"]?.try(&.as_s.lchop("off:").to_i) || 0)
         limit = Math.min(body["limit"]?.try(&.as_i) || 25, page_size)
         page = matching[offset, limit]? || [] of Flow
         result = {"results" => page.map(&.to_json_any), "limit" => limit} of String => Array(Hash(String, JSON::Any)) | Int32 | String
-        result["nextCursor"] = "off:#{offset + limit}" if offset + limit < matching.size
+        if cursorless?
+          result["total"] = matching.size
+        elsif offset + limit < matching.size
+          result["nextCursor"] = "off:#{offset + limit}"
+        end
         json(200, result)
       end
 
