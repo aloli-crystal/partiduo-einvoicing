@@ -9,8 +9,8 @@
 {% if duplicates || recorded %}
 <div class="notification is-warning is-light pd-alert" role="status" data-einv-duplicates>{% include "ui/_icon.html" with name="triangle-alert" %}<div>
   <p><strong>{% translate "einvoicing_ui.incoming.duplicates" %}</strong></p>
-  <ul>{% for other in duplicates %}<li><a href="{{ other.show_url }}">{{ other.supplier }} · {{ other.number }}</a> · {{ other.date }} · {{ other.status_label }}</li>{% endfor %}
-  {% for item in recorded %}<li>{% translate "einvoicing_ui.incoming.recorded" %} {% if item.url %}<a href="{{ item.url }}">{{ item.receipt }}</a>{% else %}{{ item.receipt }}{% endif %} · {{ item.number }} · {{ item.date }} · {{ item.amount }} · <span data-einv-origin>{{ item.origin }}</span></li>{% endfor %}</ul>
+  <ul>{% if duplicates %}{% for other in duplicates %}<li><a href="{{ other.show_url }}">{{ other.supplier }} · {{ other.number }}</a> · {{ other.date }} · {{ other.status_label }}</li>{% endfor %}{% endif %}
+  {% if recorded %}{% for item in recorded %}<li>{% translate "einvoicing_ui.incoming.recorded" %} {% if item.url %}<a href="{{ item.url }}">{{ item.receipt }}</a>{% else %}{{ item.receipt }}{% endif %} · {{ item.number }} · {{ item.date }} · {{ item.amount }} · <span data-einv-origin>{{ item.origin }}</span></li>{% endfor %}{% endif %}</ul>
 </div></div>
 {% endif %}
 <section class="pd-panel" aria-labelledby="pd-einv-in-status">

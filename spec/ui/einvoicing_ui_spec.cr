@@ -107,6 +107,28 @@ describe "Écrans de la facturation électronique sous /ext/EINV/ (ADR-005 D4)" 
     html.should_not contain("Refuser la facture")
   end
 
+  it "signale le doublon d'une facture saisie hors plateforme sans erreur, et refuse de la pré-comptabiliser" do
+    browser = S.signed_in
+    view = received(browser)
+    attachment = Partiduo::Api::Core.store_attachment(S.admin, Partiduo::Api::Core::AttachmentInput.new("fm.pdf",
+      "application/pdf", IO::Memory.new("%PDF-1.4\n%%EOF\n"))).value!
+    ledger = Partiduo::Api::Accounting.ledgers(S.admin, Partiduo::Api::Accounting::LedgerKind::Purchase).first
+    manual = Partiduo::Api::Accounting::DocumentInput.new(ledger_id: ledger.id, date: S.date("2026-09-05"),
+      third_party: "FOUR-MARTIN", lines: [Partiduo::Api::Accounting::DocumentLineInput.new(amount: S.d("250"), vat_rate: "NOR")],
+      attachment_id: attachment.id)
+    Partiduo::Api::Accounting.post_received_invoice(S.admin,
+      Partiduo::Api::Accounting::ReceivedInvoiceInput.new(document: manual, number: "FM-2026-0412")).value!
+    # Doublon en comptabilité seulement (aucune autre facture reçue par la
+    # plateforme) : la page ne doit pas parcourir une liste absente.
+    page = browser.get("/ext/EINV/incoming/#{view.id}")
+    page.status.should eq(200)
+    page.html.should contain("data-einv-duplicates")
+    page.html.should contain("Déjà enregistrée en comptabilité")
+    refused = browser.post("/ext/EINV/incoming/#{view.id}/post")
+    refused.status.should eq(422)
+    Api.reception(S.admin, view.id).status.should eq("received")
+  end
+
   it "refuse une facture reçue avec un motif ; un motif manquant est signalé" do
     browser = S.signed_in
     view = received(browser)

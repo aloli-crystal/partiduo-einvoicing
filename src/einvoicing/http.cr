@@ -71,7 +71,12 @@ module Einvoicing
         result = {} of String => String
         response.headers.each { |name, values| result[name.downcase] = values.join(", ") }
         Response.new(response.status_code, result, response.body.to_slice)
-      rescue ex : IO::Error | Socket::Error | OpenSSL::Error
+      rescue ex : ConnectorError
+        raise ex
+      rescue ex
+        # Réponse tronquée (« Unexpected end of http request », levée comme
+        # `Exception` par le client HTTP de Crystal), coupure, TLS : la
+        # plateforme est injoignable, jamais une erreur 500 de l'écran.
         raise ConnectorError.new("#{uri.try(&.host)} injoignable : #{ex.message}", nil,
           "einvoicing.errors.transport.unreachable", {"host" => uri.try(&.host).to_s, "detail" => ex.message.to_s})
       ensure
