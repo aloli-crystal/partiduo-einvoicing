@@ -48,10 +48,16 @@ describe "Factures émises : relevé, route, transmission (ADR-004 D3, D8, D9)" 
   it "laisse hors plateforme, sans signalement, une facture à un client public (Chorus Pro, ADR-004 D9 révisé)" do
     ready
     city = S.card("CUSTOMER", "Ville de Paris", "CLI-PARIS", siren: "217500016", email: "factures@paris.test")
-    Partiduo::Api::Invoicing.propose_channel(S.admin, city.id).channel.should eq("chorus_pro")
+    # Sans l'extension CHORUSPRO, le cœur propose le courriel (dépôt à la
+    # main sur le portail) : la nature suffit à laisser la facture hors
+    # plateforme, sans signalement.
+    Partiduo::Api::Invoicing.propose_channel(S.admin, city.id).channel.should eq("email")
     row = S.transmission(S.issue(city))
-    {row.channel, row.route, row.status, row.platform_required}.should eq({"chorus_pro", "off_platform", "off_platform", false})
+    {row.channel, row.route, row.status, row.platform_required}.should eq({"email", "off_platform", "off_platform", false})
     row.transmittable?.should be_false
+    portal = S.transmission(S.issue(city, channel: "public_portal"))
+    {portal.channel, portal.route, portal.status, portal.platform_required}
+      .should eq({"public_portal", "off_platform", "off_platform", false})
   end
 
   it "transmet le PDF/A-3 Factur-X du module Facturation ; « Déposée » (200) remonte de la plateforme" do
@@ -66,8 +72,13 @@ describe "Factures émises : relevé, route, transmission (ADR-004 D3, D8, D9)" 
     flow.content.should eq(Inv.document_pdf(S::SYSTEM, invoice.id).content)
     row = S.transmission(invoice)
     {row.status, row.adapter, row.syntax, row.platform_ref}.should eq({"submitted", "AFNOR", "Factur-X", flow.id})
-    # Remise par la plateforme : la facture est « envoyée » dans la Facturation.
+    # Remise par la plateforme : l'événement `invoice.platform_deposited`
+    # est publié ; la Facturation, abonnée, marque la facture « envoyée » et
+    # trace le dépôt (copie PDF, ADR-004 D9 révisé).
     Inv.document(S::SYSTEM, invoice.id).sent_at.should_not be_nil
+    Inv.pdf_copy_status(S::SYSTEM, invoice.id).deposited_at.should_not be_nil
+    deposited = Inv.document_events(S::SYSTEM, invoice.id).find!(&.action.==("platform_deposited"))
+    deposited.details["platform_ref"].should eq(flow.id)
 
     S.platform.acknowledge(flow, "Ok")
     Api.synchronize(S.admin).value!.statuses.should eq(1)
@@ -77,6 +88,32 @@ describe "Factures émises : relevé, route, transmission (ADR-004 D3, D8, D9)" 
     # Relire les mêmes statuts ne crée pas de doublon (curseur et idempotence).
     Api.synchronize(S.admin).value!.statuses.should eq(0)
     Api.transmission_events(S.admin, row.id).size.should eq(1)
+  end
+
+  it "garde « submitted » quand un abonné du dépôt lève : pas de second dépôt (CGI art. 283-3, D-CPY-007)" do
+    ready
+    invoice = S.issue
+    manifest = Partiduo::Modules.active_manifests.last
+    handlers = (manifest.subscriptions["invoice.platform_deposited"] ||= [] of Partiduo::Events::Handler)
+    failing = Partiduo::Events::Handler.new { |_event| raise "abonné en panne" }
+    handlers << failing
+    begin
+      sync = Api.synchronize(S.admin).value!
+    ensure
+      handlers.delete(failing)
+      manifest.subscriptions.delete("invoice.platform_deposited") if handlers.empty?
+    end
+    sync.transmitted.should eq(1)
+    flow = S.platform.sent("CustomerInvoice").first
+    row = S.transmission(invoice)
+    {row.status, row.platform_ref, row.attempts}.should eq({"submitted", flow.id, 1})
+    row.error.should contain("abonné en panne")
+    # Les écritures des abonnés sont annulées (point de sauvegarde) : la
+    # facture n'est pas marquée envoyée, mais le dépôt reste acquis.
+    Inv.document(S::SYSTEM, invoice.id).sent_at.should be_nil
+    Api.synchronize(S.admin)
+    S.platform.sent("CustomerInvoice").size.should eq(1)
+    S.transmission(invoice).status.should eq("submitted")
   end
 
   it "remonte « Rejetée » (213) avec son motif, puis retransmet" do

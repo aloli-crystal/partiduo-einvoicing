@@ -122,6 +122,7 @@ en:
         missing: "No accredited platform is connected."
       transmission:
         internal: "Internal error during transmission: %{detail}"
+        deposit_notice: "Invoice uploaded to the platform, but Invoicing did not record the upload (invoice not marked sent, PDF copy not sent): %{detail}"
         format: "Invoice file not produced: %{detail}"
         not_issued: "This document is not an issued invoice."
         not_transmittable: "This invoice cannot be sent in its current state (%{status})."

@@ -120,9 +120,16 @@ Api.export(actor, invoice_id, format) : FileView             # facturx cii exten
 * Fichier transmis : PDF/A-3 Factur-X de la Facturation
   (`Partiduo::Api::Invoicing.document_pdf`), CII avec note `BAR` = `B2C` pour
   une vente à un particulier, UBL PEPPOL BIS 3 pour NOALYSS-PEPPOL. Une
-  facture remise par la plateforme (`platform`) passe « envoyée » dans la
-  Facturation (`mark_sent`), sauf rejet immédiat du dépôt (213) : son canal
-  reste modifiable. Une facture de canal `platform` déjà envoyée sans dépôt
+  facture déposée avec succès sur la plateforme (`platform`) fait publier
+  l'événement `invoice.platform_deposited` (`invoice_id`, `platform_ref`,
+  `connector`) ; la Facturation, abonnée, la passe « envoyée » et en envoie
+  la copie PDF si l'option du dossier et le client la prévoient (ADR-004 D9
+  révisé, D-CPY-001 du cœur). L'événement est publié dans un point de
+  sauvegarde : un abonné qui lève n'annule pas le dépôt (la ligne reste
+  `submitted`, l'échec est noté sur elle,
+  `einvoicing.errors.transmission.deposit_notice`), jamais de second dépôt
+  (D-CPY-007 du cœur). Pas d'événement après un rejet immédiat du
+  dépôt (213) : son canal reste modifiable. Une facture de canal `platform` déjà envoyée sans dépôt
   n'est pas déposée.
 * « Encaissée » (212) au lettrage ou à l'encaissement : le statut ne passe
   `paid` qu'une fois la facture connue de la plateforme ; sinon le 212

@@ -122,6 +122,7 @@ nl:
         missing: "Er is geen erkend platform gekoppeld."
       transmission:
         internal: "Interne fout tijdens de verzending: %{detail}"
+        deposit_notice: "Factuur op het platform geplaatst, maar Facturatie heeft de plaatsing niet geregistreerd (factuur niet als verzonden gemarkeerd, pdf-kopie niet verzonden): %{detail}"
         format: "Factuurbestand niet aangemaakt: %{detail}"
         not_issued: "Dit document is geen uitgegeven factuur."
         not_transmittable: "Deze factuur kan in haar huidige toestand niet worden verzonden (%{status})."

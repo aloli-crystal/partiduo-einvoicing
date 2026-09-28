@@ -122,6 +122,7 @@ fr:
         missing: "Aucune plateforme agréée n'est raccordée."
       transmission:
         internal: "Erreur interne pendant la transmission : %{detail}"
+        deposit_notice: "Facture déposée sur la plateforme, mais la Facturation n'a pas enregistré le dépôt (facture non marquée envoyée, copie PDF non envoyée) : %{detail}"
         format: "Fichier de la facture non produit : %{detail}"
         not_issued: "Ce document n'est pas une facture émise."
         not_transmittable: "Cette facture ne se transmet pas dans son état actuel (%{status})."

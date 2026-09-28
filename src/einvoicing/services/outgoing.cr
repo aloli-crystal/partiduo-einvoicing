@@ -71,7 +71,7 @@ module Einvoicing
     #   e-reporting (note `BAR`), puis « Encaissée » au paiement ;
     # * dossier français, client professionnel étranger : e-reporting des
     #   ventes internationales ;
-    # * canal `chorus_pro` ou client public : hors plateforme, sans
+    # * canal `public_portal` (Chorus Pro) ou client public : hors plateforme, sans
     #   signalement (Chorus Pro, extension `partiduo-choruspro`) ;
     # * sinon hors plateforme ; signalé si le client est un professionnel
     #   français (l'émission par la plateforme est alors obligatoire).
@@ -80,7 +80,7 @@ module Einvoicing
       return {"platform", false} if view.issue_channel == "platform" && !sent_elsewhere
       # Client public (ADR-004 D9 révisé) : Chorus Pro, pas la plateforme
       # agréée ; ni transmission ni signalement (DECISIONS D-FIN-001).
-      return {"off_platform", false} if view.issue_channel == "chorus_pro" || view.customer.nature == "public"
+      return {"off_platform", false} if view.issue_channel == "public_portal" || view.customer.nature == "public"
       if regime == "fr"
         return {"b2c", false} if view.b2c
         return {"international", false} if international
@@ -214,12 +214,13 @@ module Einvoicing
         Lifecycle.record!(row, Connector::LifecycleEvent.new(code: "213", occurred_at: Time.utc, issuer: "platform",
           reason_code: submission.reason_code, reason: submission.reason))
       end
-      # Remise par la plateforme : la facture passe « envoyée » dans le
-      # module Facturation (canal figé). Pas après un rejet (213) : la
-      # facture n'est pas remise et son canal doit rester modifiable.
-      if row.route == "platform" && submission.status != "error"
-        Inv.mark_sent(SYSTEM, row.invoice_id!.to_i64)
-      end
+      # Dépôt réussi : l'événement `invoice.platform_deposited` est publié ;
+      # la Facturation, abonnée, marque la facture envoyée (canal figé) et
+      # en envoie la copie PDF si elle est prévue (ADR-004 D9 révisé,
+      # D-CPY-001 du cœur) : aucun appel direct entre modules. Pas après un
+      # rejet (213) : la facture n'est pas remise et son canal doit rester
+      # modifiable.
+      notify_deposit(row, adapter, by) if row.route == "platform" && submission.status != "error"
       nil
     rescue ex : ConnectorError | Formats::Cii::Error
       text = ex.is_a?(ConnectorError) ? ex.text : ErrorText.encode("einvoicing.errors.transmission.format",
@@ -228,6 +229,26 @@ module Einvoicing
       row.error = text
       row.save!
       text
+    end
+
+    # Publie `invoice.platform_deposited` dans un point de sauvegarde : le
+    # dépôt est déjà accepté par la plateforme, un abonné qui lève (document
+    # introuvable, délai de verrou…) ne doit pas l'annuler, sans quoi la
+    # synchronisation suivante redéposerait la facture (second original, CGI
+    # art. 283-3). Seules les écritures des abonnés sont annulées ; l'échec
+    # est journalisé et noté sur la ligne, qui reste « submitted »
+    # (DECISIONS D-CPY-007 du cœur).
+    private def self.notify_deposit(row : Transmission, adapter : String, by : Int64?) : Nil
+      Partiduo::Api::Transaction.run do
+        Partiduo::Events.publish("invoice.platform_deposited",
+          {"invoice_id" => row.invoice_id!.to_i64.to_s, "platform_ref" => row.platform_ref.to_s,
+           "connector" => adapter}, by)
+        Partiduo::Api::Result(Nil).success(nil)
+      end
+    rescue ex
+      Log.error(exception: ex) { "facture #{row.number} déposée ; avis de dépôt non traité" }
+      row.error = ErrorText.encode("einvoicing.errors.transmission.deposit_notice", {"detail" => ex.message.to_s})
+      row.save!
     end
 
     # Fichier d'une facture émise, produit à la demande (ADR-004 D3).
