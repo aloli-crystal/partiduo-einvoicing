@@ -71,11 +71,16 @@ module Einvoicing
     #   e-reporting (note `BAR`), puis « Encaissée » au paiement ;
     # * dossier français, client professionnel étranger : e-reporting des
     #   ventes internationales ;
+    # * canal `chorus_pro` ou client public : hors plateforme, sans
+    #   signalement (Chorus Pro, extension `partiduo-choruspro`) ;
     # * sinon hors plateforme ; signalé si le client est un professionnel
     #   français (l'émission par la plateforme est alors obligatoire).
     def self.route_of(view : Inv::DocumentView, regime : String, international : Bool,
                       sent_elsewhere : Bool = false) : {String, Bool}
       return {"platform", false} if view.issue_channel == "platform" && !sent_elsewhere
+      # Client public (ADR-004 D9 révisé) : Chorus Pro, pas la plateforme
+      # agréée ; ni transmission ni signalement (DECISIONS D-FIN-001).
+      return {"off_platform", false} if view.issue_channel == "chorus_pro" || view.customer.nature == "public"
       if regime == "fr"
         return {"b2c", false} if view.b2c
         return {"international", false} if international

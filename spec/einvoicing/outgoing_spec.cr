@@ -45,6 +45,15 @@ describe "Factures émises : relevé, route, transmission (ADR-004 D3, D8, D9)" 
     off.transmittable?.should be_false
   end
 
+  it "laisse hors plateforme, sans signalement, une facture à un client public (Chorus Pro, ADR-004 D9 révisé)" do
+    ready
+    city = S.card("CUSTOMER", "Ville de Paris", "CLI-PARIS", siren: "217500016", email: "factures@paris.test")
+    Partiduo::Api::Invoicing.propose_channel(S.admin, city.id).channel.should eq("chorus_pro")
+    row = S.transmission(S.issue(city))
+    {row.channel, row.route, row.status, row.platform_required}.should eq({"chorus_pro", "off_platform", "off_platform", false})
+    row.transmittable?.should be_false
+  end
+
   it "transmet le PDF/A-3 Factur-X du module Facturation ; « Déposée » (200) remonte de la plateforme" do
     ready
     invoice = S.issue
