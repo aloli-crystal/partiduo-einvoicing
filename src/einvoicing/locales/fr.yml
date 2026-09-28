@@ -16,7 +16,7 @@ fr:
       settings: "Plateforme agréée"
     adapters:
       afnor: "API normalisée XP Z12-013 (toute plateforme agréée)"
-      noalyss_peppol: "Point d'accès NOALYSS-PEPPOL (dossiers belges)"
+      peppol_be: "Point d'accès Peppol Belgique (dossiers belges)"
       unknown: "Adaptateur absent de cette distribution"
     fields:
       flow_url: "Adresse de l'API Flux"
@@ -29,6 +29,7 @@ fr:
       url: "Adresse du point d'accès"
       participant_id: "Identifiant PEPPOL du participant"
       user_id: "Identifiant utilisateur"
+      auth_header: "En-tête d'authentification (communiqué par l'opérateur du point d'accès)"
       token: "Jeton d'accès"
     modes:
       sandbox: "Bac à sable"
@@ -116,6 +117,7 @@ fr:
         field:
           blank: "Ce paramètre est obligatoire."
           https: "Adresse HTTPS attendue : %{value}."
+          header: "Nom d'en-tête HTTP attendu : %{value}."
           choice: "Valeur non admise : %{value}."
           too_long: "%{max} caractères au plus."
           secret_reentry: "Adresse de la plateforme modifiée : saisissez à nouveau ce secret."

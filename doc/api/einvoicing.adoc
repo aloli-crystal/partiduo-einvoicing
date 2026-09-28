@@ -40,9 +40,9 @@ Api.check_connection(actor) : Result(Nil)
 Api.disconnect(actor) : Result(Nil)
 ----
 
-* `AdapterView` : `code` (`AFNOR`, `NOALYSS_PEPPOL`…), `label_key`,
+* `AdapterView` : `code` (`AFNOR`, `PEPPOL_BE`…), `label_key`,
   `available` (régime du dossier), `fields` (`FieldView` : `name`, `secret`,
-  `required`, `kind` `url`/`text`/`choice`, `choices`, `value` — vide pour
+  `required`, `kind` `url`/`text`/`choice`/`header`, `choices`, `value` — vide pour
   un secret —, `stored`, `label_key` — `einvoicing.fields.<nom>` sauf si
   l'adaptateur déclare le sien (`Connections::Field` `label:`) —,
   `choice_prefix` et `choice_key(choix)` — `einvoicing.modes.<choix>` par
@@ -53,7 +53,8 @@ Api.disconnect(actor) : Result(Nil)
 secret enregistré doit alors être saisi à nouveau
 (`connection.field.secret_reentry`) ; les jetons en cours sont oubliés. Erreurs :
   `connection.adapter.unknown`, `.adapter.regime`, `.field.blank`,
-  `.field.https` (toute adresse doit être HTTPS), `.field.choice`,
+  `.field.https` (toute adresse doit être HTTPS), `.field.header` (nom
+  d'en-tête HTTP), `.field.choice`,
   `.field.too_long`.
 * `ConnectionView#mode` : `sandbox` ou `production` (affiché en permanence).
 
@@ -66,9 +67,11 @@ secret enregistré doit alors être saisi à nouveau
 `token_url`, `client_id`, `client_secret` (secret), `organization_id`
 (en-tête `Organization-Id`, facultatif), `environment`. Régimes `fr`, `be`.
 
-|`NOALYSS_PEPPOL`
-|`url`, `participant_id`, `user_id`, `token` (secret), `environment`.
-Régime `be`.
+|`PEPPOL_BE` (Peppol Belgique ; ex-`NOALYSS_PEPPOL`, migration 0003)
+|`url`, `participant_id`, `user_id`, `auth_header` (nom de l'en-tête
+d'authentification communiqué par l'opérateur du point d'accès :
+`Noalyss-Authz` pour celui de l'éditeur de NOALYSS), `token` (secret),
+`environment`. Régime `be`.
 |===
 
 === Hériter de l'adaptateur XP Z12-013
@@ -148,7 +151,7 @@ Api.export(actor, invoice_id, format) : FileView             # facturx cii exten
   `pending` ou `rejected`.
 * Fichier transmis : PDF/A-3 Factur-X de la Facturation
   (`Partiduo::Api::Invoicing.document_pdf`), CII avec note `BAR` = `B2C` pour
-  une vente à un particulier, UBL PEPPOL BIS 3 pour NOALYSS-PEPPOL. Une
+  une vente à un particulier, UBL PEPPOL BIS 3 pour `PEPPOL_BE`. Une
   facture déposée avec succès sur la plateforme (`platform`) fait publier
   l'événement `invoice.platform_deposited` (`invoice_id`, `platform_ref`,
   `connector`) ; la Facturation, abonnée, la passe « envoyée » et en envoie

@@ -16,7 +16,7 @@ nl:
       settings: "Erkend platform"
     adapters:
       afnor: "Genormaliseerde API XP Z12-013 (elk erkend platform)"
-      noalyss_peppol: "Toegangspunt NOALYSS-PEPPOL (Belgische dossiers)"
+      peppol_be: "Peppol-toegangspunt België (Belgische dossiers)"
       unknown: "Adapter ontbreekt in deze distributie"
     fields:
       flow_url: "Adres van de Flow-API"
@@ -29,6 +29,7 @@ nl:
       url: "Adres van het toegangspunt"
       participant_id: "PEPPOL-deelnemers-ID"
       user_id: "Gebruikers-ID"
+      auth_header: "Authenticatieheader (meegedeeld door de beheerder van het toegangspunt)"
       token: "Toegangstoken"
     modes:
       sandbox: "Testomgeving"
@@ -116,6 +117,7 @@ nl:
         field:
           blank: "Deze parameter is verplicht."
           https: "HTTPS-adres verwacht: %{value}."
+          header: "HTTP-headernaam verwacht: %{value}."
           choice: "Waarde niet toegelaten: %{value}."
           too_long: "Hoogstens %{max} tekens."
           secret_reentry: "Platformadres gewijzigd: voer dit geheim opnieuw in."

@@ -27,7 +27,7 @@ module Einvoicing
     # --- Raccordement ----------------------------------------------------------
 
     # Adaptateurs compilés dans la distribution ; `available` selon le
-    # régime du dossier (NOALYSS-PEPPOL : dossiers belges seulement).
+    # régime du dossier (`PEPPOL_BE` : dossiers belges seulement).
     def self.adapters(actor : Actor) : Array(AdapterView)
       Guard.authorize!(actor, CONFIGURE, module_code: MODULE_CODE)
       regime = regime(actor)

@@ -2,9 +2,14 @@
 
 module Einvoicing
   module Connectors
-    # Adaptateur NOALYSS-PEPPOL (ADR-004 D2) : reprise de `peppol-connect`
-    # (`class/peppol_synchro.class.php`), point d'accès PEPPOL de l'éditeur
-    # de NOALYSS, réservé aux dossiers belges (régime `be`).
+    # Adaptateur Peppol Belgique `PEPPOL_BE` (ADR-004 D2) : reprise de
+    # l'extension `peppol-connect` de l'application d'origine, point d'accès
+    # PEPPOL de son éditeur, réservé aux dossiers belges (régime `be`).
+    #
+    # Le nom de l'en-tête d'authentification est imposé par le point
+    # d'accès : c'est un paramètre du raccordement (`auth_header`), repris
+    # des raccordements existants par la migration 0003 (DECISIONS
+    # D-EINV-028).
     #
     # Différences avec l'amont :
     #
@@ -19,8 +24,8 @@ module Einvoicing
     # ni annuaire : `fetch_statuses` rend une page vide, les autres lèvent
     # `Unsupported`. La réception rend toutes les factures en attente puis
     # les confirme (`/1/acknowledge`) ; le curseur retient la dernière lue.
-    class NoalyssPeppol < Connector
-      CODE = "NOALYSS_PEPPOL"
+    class PeppolBe < Connector
+      CODE = "PEPPOL_BE"
       # Durée de validité retenue pour le jeton de session (20 minutes chez
       # l'éditeur), avec une marge.
       SESSION = 15.minutes
@@ -29,12 +34,13 @@ module Einvoicing
         Connections::Field.new("url", kind: "url"),
         Connections::Field.new("participant_id"),
         Connections::Field.new("user_id"),
+        Connections::Field.new("auth_header", kind: "header"),
         Connections::Field.new("token", secret: true),
         Connections::Field.new("environment", kind: "choice", choices: %w[sandbox production]),
       ]
 
       def self.adapter : Connections::Adapter
-        Connections::Adapter.new(CODE, "einvoicing.adapters.noalyss_peppol", %w[be], FIELDS,
+        Connections::Adapter.new(CODE, "einvoicing.adapters.peppol_be", %w[be], FIELDS,
           ->(settings : Connections::Settings) { new(settings).as(Connector) })
       end
 
@@ -100,23 +106,29 @@ module Einvoicing
       end
 
       def send_status(event : LifecycleEvent) : Nil
-        raise Unsupported.new("le point d'accès NOALYSS-PEPPOL n'échange pas de statuts", key: "einvoicing.errors.transport.no_statuses")
+        raise Unsupported.new("le point d'accès Peppol Belgique n'échange pas de statuts", key: "einvoicing.errors.transport.no_statuses")
       end
 
       def send_ereporting(batch : EReportingBatch) : Nil
-        raise Unsupported.new("pas d'e-reporting par le point d'accès NOALYSS-PEPPOL", key: "einvoicing.errors.transport.no_ereporting")
+        raise Unsupported.new("pas d'e-reporting par le point d'accès Peppol Belgique", key: "einvoicing.errors.transport.no_ereporting")
+      end
+
+      # Nom de l'en-tête d'authentification communiqué par l'opérateur du
+      # point d'accès.
+      private def auth_header : String
+        settings["auth_header"]
       end
 
       private def url(path : String) : String
         "#{settings["url"].rstrip('/')}#{path}"
       end
 
-      # `Noalyss-Authz: Bearer <session>  <utilisateur>` (deux espaces, comme
+      # `<auth_header>: Bearer <session>  <utilisateur>` (deux espaces, comme
       # l'amont). Un 401 rouvre la session et réessaie une fois
       # (`Peppol_Synchro::reconnect`).
       private def call(method : String, target : String, body : Bytes? = nil, type : String? = nil,
                        retry : Bool = true) : Http::Response
-        headers = {"Noalyss-Authz" => "Bearer #{session}  #{settings["user_id"]}", "Accept" => "application/json"}
+        headers = {auth_header => "Bearer #{session}  #{settings["user_id"]}", "Accept" => "application/json"}
         headers["Content-Type"] = type if type
         response = Http.exec(method, target, headers, body)
         if response.status == 401 && retry
@@ -131,8 +143,8 @@ module Einvoicing
         if current = settings.access_token
           return current
         end
-        response = Http.exec("POST", url("/cnx2"), {"Noalyss-Authz" => settings["token"],
-                                                    "Content-Type"  => "application/x-www-form-urlencoded"},
+        response = Http.exec("POST", url("/cnx2"), {auth_header    => settings["token"],
+                                                    "Content-Type" => "application/x-www-form-urlencoded"},
           Http.form({"participantId" => settings["participant_id"], "userId" => settings["user_id"]}))
         raise ConnectorError.new("connexion refusée (#{response.status})", response.status, "einvoicing.errors.transport.auth_refused", {"status" => response.status.to_s}) unless response.success?
         json = response.json
@@ -160,5 +172,5 @@ module Einvoicing
   end
 
   Connections.register(Connectors::Afnor.adapter)
-  Connections.register(Connectors::NoalyssPeppol.adapter)
+  Connections.register(Connectors::PeppolBe.adapter)
 end

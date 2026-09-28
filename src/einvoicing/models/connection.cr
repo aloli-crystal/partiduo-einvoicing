@@ -2,7 +2,7 @@
 
 module Einvoicing
   # Raccordement du dossier à une plateforme agréée (ADR-004 D2) : un
-  # adaptateur (`AFNOR`, `NOALYSS_PEPPOL`, ou celui d'une extension
+  # adaptateur (`AFNOR`, `PEPPOL_BE`, ou celui d'une extension
   # `partiduo-<pa>`), ses paramètres, ses secrets et ses jetons *chiffrés*
   # (`Einvoicing::Secrets`), les curseurs de synchronisation. Une seule ligne
   # active à la fois (index unique partiel posé par la migration).

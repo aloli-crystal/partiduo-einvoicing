@@ -37,7 +37,7 @@ describe "Écrans de la facturation électronique sous /ext/EINV/ (ADR-005 D4)" 
     html = page.html
     html.should contain("<h1>Plateforme agréée")
     html.should contain("API normalisée XP Z12-013")
-    html.should_not contain("Point d'accès NOALYSS-PEPPOL")
+    html.should_not contain("Point d'accès Peppol Belgique")
     html.should contain("Aucune plateforme agréée n'est raccordée")
     fields = {"adapter" => "AFNOR", "flow_url" => "http://pa.test/afnor-flow", "directory_url" => "",
               "token_url" => "https://pa.test/oauth2/token", "client_id" => S::SimulatedPlatform::CLIENT_ID,

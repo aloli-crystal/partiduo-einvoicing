@@ -16,7 +16,7 @@ en:
       settings: "Accredited platform"
     adapters:
       afnor: "XP Z12-013 standard API (any accredited platform)"
-      noalyss_peppol: "NOALYSS-PEPPOL access point (Belgian books)"
+      peppol_be: "Peppol Belgium access point (Belgian books)"
       unknown: "Adapter not included in this distribution"
     fields:
       flow_url: "Flow API address"
@@ -29,6 +29,7 @@ en:
       url: "Access point address"
       participant_id: "PEPPOL participant identifier"
       user_id: "User identifier"
+      auth_header: "Authentication header (given by the access point operator)"
       token: "Access token"
     modes:
       sandbox: "Sandbox"
@@ -116,6 +117,7 @@ en:
         field:
           blank: "This setting is required."
           https: "HTTPS address expected: %{value}."
+          header: "HTTP header name expected: %{value}."
           choice: "Value not allowed: %{value}."
           too_long: "%{max} characters at most."
           secret_reentry: "Platform address changed: enter this secret again."

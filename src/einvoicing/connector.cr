@@ -76,7 +76,7 @@ module Einvoicing
   end
 
   # Opération que la plateforme ne propose pas (statuts du point d'accès
-  # NOALYSS-PEPPOL, e-reporting hors de France…).
+  # Peppol Belgique, e-reporting hors de France…).
   class Unsupported < ConnectorError
   end
 

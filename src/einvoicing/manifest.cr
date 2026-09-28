@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 # Manifeste de l'extension EINV (ADR-003 D2, ADR-004 D1), successeur de
-# `peppol-connect` de NOALYSS.
+# l'extension `peppol-connect` de l'application d'origine.
 #
 # * Dépendance : `DOCUMENT` seulement (`depends_on`), car les factures reçues
 #   entrent dans la boîte « Justificatifs à traiter » par son API publique.

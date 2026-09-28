@@ -20,13 +20,13 @@ describe "Raccordement à la plateforme agréée (ADR-004 D2, D6, D8)" do
     Einvoicing::Secrets.decrypt_json(Einvoicing::Secrets.encrypt_json({"a" => "b"})).should eq({"a" => "b"})
   end
 
-  it "liste les adaptateurs selon le régime du dossier : NOALYSS-PEPPOL pour la Belgique seulement" do
+  it "liste les adaptateurs selon le régime du dossier : PEPPOL_BE pour la Belgique seulement" do
     S.books("fr")
     adapters = Api.adapters(S.admin)
-    adapters.map { |item| {item.code, item.available} }.should eq([{"AFNOR", true}, {"NOALYSS_PEPPOL", false}])
+    adapters.map { |item| {item.code, item.available} }.should eq([{"AFNOR", true}, {"PEPPOL_BE", false}])
     adapters.first.fields.map(&.name).should contain("client_secret")
     adapters.first.fields.find! { |item| item.name == "client_secret" }.secret.should be_true
-    result = Api.configure(S.admin, Api::ConnectionInput.new("NOALYSS_PEPPOL", {"url" => "https://peppol.test"}))
+    result = Api.configure(S.admin, Api::ConnectionInput.new("PEPPOL_BE", {"url" => "https://peppol.test"}))
     result.errors.map(&.key).should contain("einvoicing.errors.connection.adapter.regime")
     Api.configure(S.admin, Api::ConnectionInput.new("INCONNU")).errors.map(&.key)
       .should eq(["einvoicing.errors.connection.adapter.unknown"])

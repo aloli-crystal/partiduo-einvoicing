@@ -24,6 +24,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Dépendances path (cœur, interface, shards maison)
         run: scripts/ci-checkout-deps.sh
+      - name: Aucune mention du logiciel d'origine hors documentation
+        # Motif écrit « noal[y]ss » pour que ce fichier ne se trouve pas lui-même.
+        run: |
+          if git grep -il 'noal[y]ss' -- . ':!*.adoc' ':!*.md'; then
+            echo "Le nom du logiciel d'origine n'est admis que dans les fichiers .adoc et .md." >&2
+            exit 1
+          fi
       - name: Format
         run: crystal tool format --check src ui spec config scripts manage.cr
       - name: Shards

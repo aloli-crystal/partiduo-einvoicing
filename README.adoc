@@ -36,7 +36,9 @@ session) *chiffrés en base* ; TLS toujours vérifié.
 |Adaptateurs
 |*XP Z12-013* (API Flux et API Annuaire normalisées AFNOR, OAuth 2 client
 credentials ; toute plateforme agréée qui les implémente, SuperPDP compris)
-et *NOALYSS-PEPPOL* (reprise de `peppol-connect`, dossiers belges). Une
+et *Peppol Belgique* `PEPPOL_BE` (reprise de `peppol-connect` de NOALYSS,
+dossiers belges ; en-tête d'authentification `Noalyss-Authz` à saisir dans
+le paramètre `auth_header`). Une
 extension `partiduo-<pa>` ajoute le sien par
 `Einvoicing::Connections.register` (ADR-004 D6, D8).
 
@@ -87,7 +89,7 @@ src/partiduo-einvoicing/cli.cr    # migrations pour la ligne de commande
 src/einvoicing/
 ├── app.cr, manifest.cr           # application Marten `einvoicing`, manifeste EINV
 ├── connector.cr, http.cr         # connecteur abstrait, transport HTTP (TLS vérifié)
-├── connectors/                   # adaptateurs AFNOR (XP Z12-013), NOALYSS_PEPPOL
+├── connectors/                   # adaptateurs AFNOR (XP Z12-013), PEPPOL_BE
 ├── formats/                      # lecture UBL/CII/Factur-X, UBL, variantes CII, CDAR, e-reporting
 ├── models/, migrations/          # tables einvoicing_*
 ├── services/                     # règles internes (émission, réception, cycle de vie…)
@@ -132,7 +134,7 @@ crystal tool format src spec ui config scripts manage.cr && bin/ameba
 
 Les specs tournent contre une plateforme agréée simulée
 (`spec/support/platform.cr`) qui reproduit les réponses documentées des API
-XP Z12-013 1.3.0 et NOALYSS-PEPPOL ; aucune n'appelle le réseau.
+XP Z12-013 1.3.0 et Peppol Belgique ; aucune n'appelle le réseau.
 
 == Licence
 

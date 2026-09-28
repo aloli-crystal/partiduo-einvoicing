@@ -6,12 +6,12 @@ module Einvoicing
   module Formats
     # Production d'une facture ou d'un avoir UBL 2.1 au profil EN 16931
     # (ADR-004 D3), ou PEPPOL BIS Billing 3.0 pour le point d'accès belge.
-    # Successeur de `InvoiceUBL21` de NOALYSS
+    # Successeur de `InvoiceUBL21` de l'application d'origine
     # (`include/XMLDocument/invoiceubl21.class.php`), construit depuis la vue
     # d'un document émis du module Facturation (`Partiduo::Api::Invoicing`),
     # jamais depuis ses tables.
     #
-    # SIREN en schéma `0002` (NOALYSS écrivait `0009`, ADR-004 § Contexte) ;
+    # SIREN en schéma `0002` (l'application d'origine écrivait `0009`, ADR-004 § Contexte) ;
     # adresse électronique `0225` (annuaire français) ou `0208` (numéro
     # d'entreprise belge).
     module Ubl

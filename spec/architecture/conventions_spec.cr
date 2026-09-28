@@ -16,6 +16,14 @@ private def flatten_keys(value : YAML::Any, prefix : String = "") : Array(String
 end
 
 describe "Conventions de l'extension EINV" do
+  it "ne nomme le logiciel d'origine que dans la documentation (.adoc, .md)" do
+    output = IO::Memory.new
+    # Motif écrit « noal[y]ss » pour que cette spec ne se trouve pas elle-même.
+    Process.run("git", ["grep", "-il", "--untracked", "noal[y]ss", "--", ".", ":!*.adoc", ":!*.md"],
+      chdir: Einvoicing::SpecSupport::ROOT, output: output)
+    output.to_s.split('\n', remove_empty: true).should be_empty
+  end
+
   it "ouvre chaque fichier source par l'en-tête SPDX" do
     missing = (source_files("{src,ui,spec,config,scripts}/**/*.{cr,sh}") + source_files("*.cr")).reject do |path|
       lines = File.read_lines(path)

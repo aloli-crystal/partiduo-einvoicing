@@ -8,7 +8,7 @@ module Einvoicing
     # Plateforme agréée simulée (ADR-004 D6) : double du transport HTTP qui
     # reproduit les réponses documentées de l'API XP Z12-013 1.3.0 (Flux et
     # Annuaire, OAuth 2 client credentials, `https://pa.test`) et de l'API
-    # NOALYSS-PEPPOL (`https://peppol.test`). Les specs y déposent des
+    # Peppol Belgique (`https://peppol.test`). Les specs y déposent des
     # factures reçues et des statuts, et lisent ce que l'extension y a
     # envoyé.
     class SimulatedPlatform < Einvoicing::Http::Transport
@@ -17,7 +17,8 @@ module Einvoicing
 
       CLIENT_ID     = "partiduo-client"
       CLIENT_SECRET = "s3cr3t-client"
-      PEPPOL_TOKEN  = "noalyssToken42"
+      PEPPOL_TOKEN  = "peppolToken42"
+      PEPPOL_HEADER = "Peppol-Authz"
 
       class Flow
         property id : String
@@ -70,7 +71,7 @@ module Einvoicing
       property result_order : String = "asc"
       # Annuaire.
       property directory = [] of Hash(String, JSON::Any)
-      # Point d'accès NOALYSS-PEPPOL.
+      # Point d'accès Peppol Belgique.
       getter peppol_sent = [] of {Hash(String, String), String, Bytes}
       getter peppol_inbox = [] of {String, String, String}
       getter peppol_acknowledged = [] of String
@@ -229,16 +230,16 @@ module Einvoicing
         json(200, {"results" => results, "totalNumberOfResults" => results.size})
       end
 
-      # --- API NOALYSS-PEPPOL --------------------------------------------------------
+      # --- API Peppol Belgique -------------------------------------------------------
 
       private def peppol(request : Request, uri : URI) : Response
         if uri.path == "/cnx2"
-          return json(401, {"error" => "token"}) unless request.headers["Noalyss-Authz"]? == PEPPOL_TOKEN
+          return json(401, {"error" => "token"}) unless request.headers[PEPPOL_HEADER]? == PEPPOL_TOKEN
           @peppol_sessions += 1
           return json(200, {"transfer" => "ok", "peppol_id" => "0208:0417497106", "authorization" => "sess-#{@peppol_sessions}"})
         end
         expected = "Bearer sess-#{@peppol_sessions}  PDUO"
-        return json(401, {"error" => "session"}) unless request.headers["Noalyss-Authz"]? == expected
+        return json(401, {"error" => "session"}) unless request.headers[PEPPOL_HEADER]? == expected
         case {request.method, uri.path}
         when {"POST", "/1/documents/outgoing"}
           boundary = MIME::Multipart.parse_boundary(request.headers["Content-Type"]) || raise "multipart sans boundary"

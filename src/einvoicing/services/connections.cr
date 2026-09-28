@@ -3,14 +3,15 @@
 module Einvoicing
   # Adaptateurs de plateforme agréée et raccordement du dossier (ADR-004 D2,
   # D6). Les adaptateurs s'enregistrent ici : `AFNOR` (XP Z12-013) et
-  # `NOALYSS_PEPPOL` dans ce dépôt ; une extension `partiduo-<pa>` (SuperPDP,
+  # `PEPPOL_BE` dans ce dépôt ; une extension `partiduo-<pa>` (SuperPDP,
   # ADR-004 D8) ajoute le sien par `Einvoicing::Connections.register`.
   # Interne ; les écrans passent par `Einvoicing::Api`.
   module Connections
     alias FieldError = Partiduo::Api::FieldError
 
     # Paramètre d'un adaptateur : nom, secret (chiffré en base, jamais
-    # réaffiché), obligatoire, nature (`url` HTTPS, `text`, `choice`).
+    # réaffiché), obligatoire, nature (`url` HTTPS, `text`, `choice`, `header`
+    # : nom d'en-tête HTTP).
     # Libellés : `label_key` (par défaut `einvoicing.fields.<nom>`) et, pour
     # un choix, `<choice_prefix>.<choix>` (par défaut `einvoicing.modes`) ;
     # une extension déclare ainsi les siens dans son propre espace
@@ -108,6 +109,9 @@ module Einvoicing
       @@adapters[code]?
     end
 
+    # Nom d'en-tête HTTP admis (jeton de la RFC 9110).
+    HEADER_NAME = /\A[A-Za-z0-9!#$%&'*+.^_`|~-]{1,64}\z/
+
     def self.active : Connection?
       Connection.filter(active: true).first
     end
@@ -156,6 +160,10 @@ module Einvoicing
           uri = URI.parse(value) rescue nil
           if uri.nil? || uri.scheme != "https" || uri.host.to_s.empty?
             errors << FieldError.new(field.name, "einvoicing.errors.connection.field.https", {"value" => value})
+          end
+        when "header"
+          unless value.matches?(HEADER_NAME)
+            errors << FieldError.new(field.name, "einvoicing.errors.connection.field.header", {"value" => value})
           end
         when "choice"
           unless field.choices.includes?(value)

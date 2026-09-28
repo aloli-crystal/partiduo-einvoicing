@@ -96,7 +96,7 @@ module Einvoicing
 
     # Lecture des factures reçues (ADR-004 D3) : UBL 2.1 (facture ou avoir),
     # CII (D16B à D22B) et Factur-X (PDF/A-3 dont on extrait le XML
-    # embarqué). Successeur de `XML_Reader` de NOALYSS
+    # embarqué). Successeur de `XML_Reader` de l'application d'origine
     # (`include/XMLDocument/xml_reader.class.php`), qui ne lisait que l'UBL.
     module Reader
       NS_UBL_INVOICE = "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"

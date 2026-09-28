@@ -10,11 +10,11 @@ require "./connectors/**"
 require "./api/**"
 
 # Extension EINV de Partiduo : facturation électronique (ADR-004), successeur
-# de `peppol-connect` de NOALYSS. Même plan qu'une application du cœur
+# de l'extension `peppol-connect` de l'application d'origine. Même plan qu'une application du cœur
 # (DECISIONS C1) : `manifest.cr`, `models/`, `migrations/`, `services/`
 # (interne), `api/` (contrat public `Einvoicing::Api`), `locales/` ; en plus
 # `connector.cr` (connecteur abstrait de plateforme agréée, ADR-004 D2),
-# `connectors/` (adaptateurs XP Z12-013 et NOALYSS-PEPPOL) et `formats/`
+# `connectors/` (adaptateurs XP Z12-013 et Peppol Belgique) et `formats/`
 # (CII, UBL, Factur-X, CDAR, e-reporting).
 module Einvoicing
   VERSION = "0.1.0"

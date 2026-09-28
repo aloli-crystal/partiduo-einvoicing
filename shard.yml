@@ -3,8 +3,8 @@ version: 0.1.0
 
 description: |
   Extension EINV de Partiduo : facturation électronique (réforme française
-  et PEPPOL belge), successeur de peppol-connect de NOALYSS. Connecteur de
-  plateforme agréée abstrait (XP Z12-013, NOALYSS-PEPPOL), émission des
+  et PEPPOL belge), successeur de l'extension peppol-connect d'origine. Connecteur de
+  plateforme agréée abstrait (XP Z12-013, Peppol Belgique), émission des
   factures Factur-X du module Facturation, réception (UBL, CII, Factur-X)
   dans la boîte « Justificatifs à traiter », cycle de vie et e-reporting
   (ADR-004, ADR-003).

@@ -110,8 +110,9 @@ module Einvoicing
     end
 
     def self.connect_peppol : Api::ConnectionView
-      Api.configure(admin, Api::ConnectionInput.new("NOALYSS_PEPPOL", {
+      Api.configure(admin, Api::ConnectionInput.new("PEPPOL_BE", {
         "url" => "https://peppol.test", "participant_id" => "0208:0417497106", "user_id" => "PDUO",
+        "auth_header" => SimulatedPlatform::PEPPOL_HEADER,
         "token" => SimulatedPlatform::PEPPOL_TOKEN, "environment" => "production",
       })).value!
     end

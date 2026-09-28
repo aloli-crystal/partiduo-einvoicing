@@ -138,7 +138,7 @@ module Einvoicing
                                   file = Inv.document_pdf(SYSTEM, view.id)
                                   {file.filename, "application/pdf", file.content}
                                 when "UBL"
-                                  {"#{view.number}.xml", "application/xml", ubl(view, peppol: connector.is_a?(Connectors::NoalyssPeppol)).to_slice}
+                                  {"#{view.number}.xml", "application/xml", ubl(view, peppol: connector.is_a?(Connectors::PeppolBe)).to_slice}
                                 else
                                   {"#{view.number}.xml", "application/xml", cii(view, Formats::EN16931, b2c).to_slice}
                                 end
