@@ -61,10 +61,10 @@ jobs:
         with:
           crystal: 1.19.1
       - name: Bibliothèques de compilation
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libyaml-dev libssl-dev libgmp-dev libxml2-dev libpcre2-dev
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libyaml-dev libssl-dev libgmp-dev libxml2-dev libpcre2-dev lld
       - name: Dépendances path (cœur, interface, shards maison)
         run: scripts/ci-checkout-deps.sh
       - name: Shards
         run: shards install
       - name: Specs
-        run: crystal spec --order random --no-debug --threads 1
+        run: crystal spec --order random --no-debug --threads 1 --link-flags=-fuse-ld=lld
