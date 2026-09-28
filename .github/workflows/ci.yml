@@ -57,4 +57,4 @@ jobs:
       - name: Shards
         run: shards install
       - name: Specs
-        run: crystal spec --order random --no-debug --threads 2
+        run: crystal spec --order random --no-debug --threads 1
