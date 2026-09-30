@@ -46,6 +46,7 @@ module Einvoicing
             cbc(xml, "Note", view.notes) unless view.notes.empty?
             cbc(xml, "DocumentCurrencyCode", currency)
             cbc(xml, "BuyerReference", view.buyer_reference) unless view.buyer_reference.empty?
+            header_period(xml, view)
             unless view.order_reference.empty?
               xml.element("cac:OrderReference") { cbc(xml, "ID", view.order_reference) }
             end
@@ -91,7 +92,7 @@ module Einvoicing
               money(xml, "PayableAmount", totals.payable, currency)
             end
             view.lines.select(&.priced?).each_with_index do |line, index|
-              line_item(xml, line, index + 1, currency, credit)
+              line_item(xml, line, index + 1, currency, credit, delivery_note(view, line))
             end
           end
         end
@@ -166,7 +167,7 @@ module Einvoicing
 
       private def self.delivery(xml : XML::Builder, view : Inv::DocumentView) : Nil
         address = view.delivery_address
-        delivered = view.delivery_date
+        delivered = view.summary_invoice? ? nil : view.delivery_date
         return if address.nil? && delivered.nil?
         xml.element("cac:Delivery") do
           cbc(xml, "ActualDeliveryDate", iso(delivered)) if delivered
@@ -209,11 +210,41 @@ module Einvoicing
         end
       end
 
-      private def self.line_item(xml : XML::Builder, line : Inv::LineView, index : Int32, currency : String, credit : Bool) : Nil
+      # Facture récapitulative de livraisons : période de facturation (BG-14)
+      # au lieu d'une date de livraison unique (D-INV2-003 du cœur).
+      private def self.header_period(xml : XML::Builder, view : Inv::DocumentView) : Nil
+        if (from = view.billing_period_start) && (upto = view.billing_period_end)
+          period(xml, from, upto)
+        end
+      end
+
+      # Bon de livraison d'une ligne de facture récapitulative.
+      private def self.delivery_note(view : Inv::DocumentView, line : Inv::LineView) : Inv::DeliveryNoteRefView?
+        return unless view.summary_invoice?
+        line.delivery_note_id.try { |id| view.delivery_notes.find(&.id.==(id)) }
+      end
+
+      # Période de facturation (`cac:InvoicePeriod`, BG-14 en tête, BG-26 sur
+      # une ligne).
+      private def self.period(xml : XML::Builder, from : Time, upto : Time) : Nil
+        xml.element("cac:InvoicePeriod") do
+          cbc(xml, "StartDate", iso(from))
+          cbc(xml, "EndDate", iso(upto))
+        end
+      end
+
+      # `note` : bon de livraison d'une ligne de facture récapitulative (note
+      # BT-127, date de livraison en période BG-26).
+      private def self.line_item(xml : XML::Builder, line : Inv::LineView, index : Int32, currency : String, credit : Bool,
+                                 note : Inv::DeliveryNoteRefView? = nil) : Nil
         xml.element(credit ? "cac:CreditNoteLine" : "cac:InvoiceLine") do
           cbc(xml, "ID", index.to_s)
+          cbc(xml, "Note", note.number) if note
           cbc(xml, credit ? "CreditedQuantity" : "InvoicedQuantity", Formats.amount(line.quantity, 4), {"unitCode" => line.unit_code})
           money(xml, "LineExtensionAmount", line.net_amount, currency)
+          if delivered = note.try(&.delivery_date)
+            period(xml, delivered, delivered)
+          end
           unless line.discount_amount.zero?
             xml.element("cac:AllowanceCharge") do
               cbc(xml, "ChargeIndicator", "false")

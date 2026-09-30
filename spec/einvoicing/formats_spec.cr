@@ -4,6 +4,7 @@ require "../spec_helper"
 
 private alias S = Einvoicing::SpecSupport
 private alias F = Einvoicing::Formats
+private alias Inv = Partiduo::Api::Invoicing
 
 describe "Formats de la facture électronique (ADR-004 D3)" do
   it "reconnaît UBL, CII et Factur-X à leur contenu" do
@@ -116,6 +117,43 @@ describe "Formats de la facture électronique (ADR-004 D3)" do
     b2c.should contain("<ram:IncludedNote><ram:Content>B2C</ram:Content><ram:SubjectCode>BAR</ram:SubjectCode></ram:IncludedNote>")
     F::Reader.parse(b2c.to_slice).notes.should contain("B2C")
     expect_raises(F::Cii::Error) { F::Cii.variant("<x/>") }
+  end
+
+  # Facture récapitulative de plusieurs bons de livraison (D-INV2-003 du
+  # cœur) : période de facturation (BG-14), bon et date de livraison de
+  # chaque ligne (BT-127, BG-26), en CII comme en UBL.
+  it "transmet la période et les lignes d'une facture récapitulative, en CII et en UBL" do
+    S.books
+    product = S.item
+    notes = ["2026-09-03", "2026-09-08"].map do |day|
+      draft = Inv.create_document(S::SYSTEM, Inv::DocumentInput.new(kind: "delivery_note", customer_card_id: S.customer.id,
+        lines: [Inv::LineInput.new(item_card_id: product.id, quantity: S.d("2"))])).value!
+      Inv.issue(S::SYSTEM, draft.id, Inv::IssueInput.new(S.date(day))).value!
+    end
+    draft = Inv.invoice_delivery_notes(S::SYSTEM, notes.map(&.id)).value!
+    invoice = Inv.issue(S::SYSTEM, draft.id, Inv::IssueInput.new(S.date("2026-09-10"))).value!
+    invoice.summary_invoice?.should be_true
+
+    cii = Einvoicing::Outgoing.cii(invoice, F::EXTENDED_CTC_FR)
+    settlement = cii.split("<ram:ApplicableHeaderTradeSettlement>").last
+    settlement.should match(%r{<ram:BillingSpecifiedPeriod>\s*<ram:StartDateTime>\s*<udt:DateTimeString format="102">20260903</udt:DateTimeString>})
+    settlement.should match(%r{<ram:EndDateTime>\s*<udt:DateTimeString format="102">20260908</udt:DateTimeString>})
+    cii.should_not contain("ActualDeliverySupplyChainEvent")
+    items = cii.split("<ram:IncludedSupplyChainTradeLineItem>")[1..]
+    items.size.should eq(2)
+    items[0].should contain("<ram:Content>#{notes[0].number}</ram:Content>")
+    items[1].should contain("<ram:Content>#{notes[1].number}</ram:Content>")
+    items[1].should match(%r{<ram:StartDateTime>\s*<udt:DateTimeString format="102">20260908</udt:DateTimeString>})
+    parsed = F::Reader.parse(cii.to_slice)
+    parsed.total_net.should eq(S.d("320"))
+    parsed.lines.size.should eq(2)
+
+    ubl = Einvoicing::Outgoing.ubl(invoice)
+    ubl.should match(%r{<cac:InvoicePeriod>\s*<cbc:StartDate>2026-09-03</cbc:StartDate>\s*<cbc:EndDate>2026-09-08</cbc:EndDate>})
+    ubl.should_not contain("ActualDeliveryDate")
+    ubl.should match(%r{<cbc:ID>1</cbc:ID>\s*<cbc:Note>#{notes[0].number}</cbc:Note>})
+    ubl.should match(%r{<cbc:LineExtensionAmount currencyID="EUR">160.00</cbc:LineExtensionAmount>\s*<cac:InvoicePeriod>\s*<cbc:StartDate>2026-09-03</cbc:StartDate>})
+    F::Reader.parse(ubl.to_slice).total_gross.should eq(S.d("384"))
   end
 
   it "extrait et lit le XML embarqué d'un PDF/A-3 Factur-X" do
