@@ -156,6 +156,61 @@ describe "Formats de la facture électronique (ADR-004 D3)" do
     F::Reader.parse(ubl.to_slice).total_gross.should eq(S.d("384"))
   end
 
+  # Retours de marchandises (D-INV3-003, D-INV3-004 du cœur) : retour déduit
+  # d'une facture en quantité négative (BT-129 ; prix net BT-146 positif,
+  # BR-27), bon de retour cité (BT-127) ; avoir récapitulatif (381) quand les
+  # retours l'emportent, facture créditée citée (BG-3).
+  it "transmet un retour déduit en quantité négative, et l'avoir récapitulatif, en CII et en UBL" do
+    S.books
+    product = S.item
+    issue = ->(kind : String, quantity : String, day : String) do
+      draft = Inv.create_document(S::SYSTEM, Inv::DocumentInput.new(kind: kind, customer_card_id: S.customer.id,
+        lines: [Inv::LineInput.new(item_card_id: product.id, quantity: S.d(quantity))],
+        return_reason: kind == "return_note" ? "damaged" : nil)).value!
+      Inv.issue(S::SYSTEM, draft.id, Inv::IssueInput.new(S.date(day))).value!
+    end
+    delivered = issue.call("delivery_note", "3", "2026-09-03")
+    returned = issue.call("return_note", "1", "2026-09-05")
+    draft = Inv.invoice_delivery_notes(S::SYSTEM, [delivered.id, returned.id]).value!
+    invoice = Inv.issue(S::SYSTEM, draft.id, Inv::IssueInput.new(S.date("2026-09-10"))).value!
+    invoice.kind.should eq("invoice")
+    invoice.totals.total_net.should eq(S.d("160"))
+
+    cii = Einvoicing::Outgoing.cii(invoice, F::EXTENDED_CTC_FR)
+    items = cii.split("<ram:IncludedSupplyChainTradeLineItem>")[1..]
+    items.size.should eq(2)
+    items[1].should contain("<ram:Content>#{returned.number}</ram:Content>")
+    items[1].should match(/<ram:BilledQuantity unitCode="[A-Z0-9]+">-1\.0000</)
+    items[1].should match(/<ram:ChargeAmount>80\.0000</)
+    items[1].should match(/<ram:LineTotalAmount>-80\.00</)
+    parsed = F::Reader.parse(cii.to_slice)
+    parsed.total_net.should eq(S.d("160"))
+    parsed.lines.map(&.quantity).should eq([S.d("3"), S.d("-1")])
+
+    ubl = Einvoicing::Outgoing.ubl(invoice)
+    ubl.should match(%r{<cbc:Note>#{returned.number}</cbc:Note>\s*<cbc:InvoicedQuantity unitCode="[A-Z0-9]+">-1.0000</cbc:InvoicedQuantity>})
+    ubl.should contain(%(<cbc:LineExtensionAmount currencyID="EUR">-80.00</cbc:LineExtensionAmount>))
+    F::Reader.parse(ubl.to_slice).total_net.should eq(S.d("160"))
+
+    # Les retours l'emportent : avoir récapitulatif sur la facture.
+    small = issue.call("delivery_note", "1", "2026-09-12")
+    big = issue.call("return_note", "2", "2026-09-14")
+    credit_draft = Inv.invoice_delivery_notes(S::SYSTEM, [small.id, big.id]).value!
+    credit_draft.kind.should eq("credit_note")
+    credit = Inv.issue(S::SYSTEM, credit_draft.id, Inv::IssueInput.new(S.date("2026-09-15"))).value!
+    credit.credited.try(&.id).should eq(invoice.id)
+    credit.totals.total_net.should eq(S.d("80"))
+    credit_cii = Einvoicing::Outgoing.cii(credit, F::EXTENDED_CTC_FR)
+    credit_cii.should contain("<ram:TypeCode>381</ram:TypeCode>")
+    credit_cii.should contain(invoice.number.to_s)
+    credit_ubl = Einvoicing::Outgoing.ubl(credit)
+    credit_ubl.should contain("<CreditNote")
+    credit_ubl.should match(%r{<cbc:CreditedQuantity unitCode="[A-Z0-9]+">-1.0000</cbc:CreditedQuantity>})
+    credit_ubl.should match(%r{<cbc:CreditedQuantity unitCode="[A-Z0-9]+">2.0000</cbc:CreditedQuantity>})
+    credit_ubl.should contain("<cac:BillingReference>")
+    F::Reader.parse(credit_ubl.to_slice).credit_note?.should be_true
+  end
+
   it "extrait et lit le XML embarqué d'un PDF/A-3 Factur-X" do
     S.books
     invoice = S.issue

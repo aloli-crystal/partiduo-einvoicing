@@ -218,10 +218,15 @@ module Einvoicing
         end
       end
 
-      # Bon de livraison d'une ligne de facture récapitulative.
+      # Bon d'une ligne : bon de retour d'une ligne déduite d'une facture ou
+      # créditée par un avoir (D-INV3-003 du cœur), sinon bon de livraison
+      # d'une ligne de facture (ou d'avoir) récapitulative.
       private def self.delivery_note(view : Inv::DocumentView, line : Inv::LineView) : Inv::DeliveryNoteRefView?
+        if id = line.return_note_id
+          return view.return_notes.find(&.id.==(id))
+        end
         return unless view.summary_invoice?
-        line.delivery_note_id.try { |id| view.delivery_notes.find(&.id.==(id)) }
+        line.delivery_note_id.try { |note_id| view.delivery_notes.find(&.id.==(note_id)) }
       end
 
       # Période de facturation (`cac:InvoicePeriod`, BG-14 en tête, BG-26 sur
@@ -233,8 +238,11 @@ module Einvoicing
         end
       end
 
-      # `note` : bon de livraison d'une ligne de facture récapitulative (note
-      # BT-127, date de livraison en période BG-26).
+      # `note` : bon de livraison d'une ligne de facture récapitulative, ou bon
+      # de retour (note BT-127, date de livraison ou de retour en période
+      # BG-26). Quantité négative admise (BT-129, retour déduit d'une facture ;
+      # livraison imputée sur un avoir récapitulatif) ; le prix net (BT-146)
+      # reste positif (BR-27).
       private def self.line_item(xml : XML::Builder, line : Inv::LineView, index : Int32, currency : String, credit : Bool,
                                  note : Inv::DeliveryNoteRefView? = nil) : Nil
         xml.element(credit ? "cac:CreditNoteLine" : "cac:InvoiceLine") do
