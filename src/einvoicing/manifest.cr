@@ -23,7 +23,7 @@
 Partiduo::Modules.register do
   code "EINV"
   name "einvoicing.module.name"
-  version "0.1.0"
+  version Einvoicing::VERSION
   requires_core "~> 0.1"
   depends_on "DOCUMENT"
 
