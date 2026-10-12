@@ -22,8 +22,8 @@ jobs:
     container: crystallang/crystal:1.19.1
     steps:
       - uses: actions/checkout@v4
-      - name: Dépendances path (cœur, interface, shards maison)
-        run: scripts/ci-checkout-deps.sh
+      - name: Verrou sans dépendance « path » (exigé par les ports FreeBSD)
+        run: "! grep -q 'path:' shard.lock"
       - name: Aucune mention du logiciel d'origine hors documentation
         # Motif écrit « noal[y]ss » pour que ce fichier ne se trouve pas lui-même.
         run: |
@@ -71,8 +71,6 @@ jobs:
           crystal: 1.19.1
       - name: Bibliothèques de compilation
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libyaml-dev libssl-dev libgmp-dev libxml2-dev libpcre2-dev lld
-      - name: Dépendances path (cœur, interface, shards maison)
-        run: scripts/ci-checkout-deps.sh
       - name: Shards
         run: shards install
       - name: Specs

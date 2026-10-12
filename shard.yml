@@ -1,5 +1,5 @@
 name: partiduo-einvoicing
-version: 0.1.1
+version: 0.1.2
 
 description: |
   Extension EINV de Partiduo : facturation électronique (réforme française
@@ -23,21 +23,26 @@ targets:
 dependencies:
   # Le cœur : registre, événements, pièces jointes et contrat Partiduo::Api.
   partiduo:
-    path: ../partiduo-app
+    github: aloli-partiduo/partiduo-app
+    branch: development
   # La boîte « Justificatifs à traiter » (Document::Api.receive).
   partiduo-document:
-    path: ../partiduo-document
+    github: aloli-partiduo/partiduo-document
+    branch: development
   marten:
-    path: ../../prod-crystal/marten
+    github: aloli-crystal/marten
+    branch: production
   # Lecture des fichiers embarqués d'un PDF/A-3 Factur-X.
   pdf:
-    path: ../../prod-crystal/pdf
+    github: aloli-crystal/pdf
+    version: "~> 1.4"
 
 development_dependencies:
   # L'interface qui monte ui/bulma/ : nécessaire aux specs et à manage.cr ;
   # la distribution l'apporte elle-même.
   partiduo-ui-bulma:
-    path: ../partiduo-ui-bulma
+    github: aloli-partiduo/partiduo-ui-bulma
+    branch: development
   ameba:
     github: crystal-ameba/ameba
     version: "~> 1.6"

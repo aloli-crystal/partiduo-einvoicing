@@ -1,4 +1,3 @@
-# NOTICE: This lockfile contains some overrides from shard.override.yml
 version: 2.0
 shards:
   ameba:
@@ -6,8 +5,8 @@ shards:
     version: 1.7.0
 
   authn:
-    path: ../../prod-crystal/authn
-    version: 0.3.0
+    git: https://github.com/aloli-crystal/authn.git
+    version: 0.3.0+git.commit.be98021bf0da7c8fd8306b3d715e425aec5e7aa3
 
   bcrypt:
     git: https://github.com/jgaskins/bcrypt.git
@@ -19,7 +18,7 @@ shards:
 
   db:
     git: https://github.com/crystal-lang/crystal-db.git
-    version: 0.14.0
+    version: 0.15.0
 
   ed25519:
     git: https://github.com/spider-gazelle/ed25519.git
@@ -33,21 +32,21 @@ shards:
     git: https://github.com/crystal-i18n/i18n.git
     version: 0.2.2
 
-  jose: # Overridden
-    path: ../../prod-crystal/jose
+  jose:
+    git: https://github.com/aloli-crystal/jose.git
     version: 0.2.0
 
   jwt:
     git: https://github.com/crystal-community/jwt.git
     version: 1.7.2
 
-  marten: # Overridden
-    path: ../../prod-crystal/marten
-    version: 0.7.0
+  marten:
+    git: https://github.com/aloli-crystal/marten.git
+    version: 0.7.0+git.commit.daabb7c242a307a1c90899acbbf5c40f170fe2b8
 
   marten_auth:
-    git: https://github.com/martenframework/marten-auth.git
-    version: 0.2.1
+    git: https://github.com/aloli-crystal/marten-auth.git
+    version: 0.2.1+git.commit.9b53b72bec80555ce24289d6d689c7a226538674
 
   matrix:
     git: https://github.com/exilor/matrix.git
@@ -61,41 +60,41 @@ shards:
     git: https://github.com/spider-gazelle/openssl_ext.git
     version: 2.8.5
 
-  partiduo: # Overridden
-    path: ../partiduo-app
+  partiduo:
+    git: https://github.com/aloli-partiduo/partiduo-app.git
+    version: 0.1.10+git.commit.ba07dd1ed8277c76176e8706a2d495d956494602
+
+  partiduo-document:
+    git: https://github.com/aloli-partiduo/partiduo-document.git
+    version: 0.1.2+git.commit.f3acc06d02854d1fc137233b542f531cd0e8f9fb
+
+  partiduo-ui-bulma:
+    git: https://github.com/aloli-partiduo/partiduo-ui-bulma.git
+    version: 0.1.6+git.commit.5e2b0604a438997b50e20fe284f840c1785e08d6
+
+  password-policy:
+    git: https://github.com/aloli-crystal/password-policy.git
     version: 0.1.0
 
-  partiduo-document: # Overridden
-    path: ../partiduo-document
-    version: 0.1.0
-
-  partiduo-ui-bulma: # Overridden
-    path: ../partiduo-ui-bulma
-    version: 0.1.0
-
-  password-policy: # Overridden
-    path: ../../prod-crystal/password-policy
-    version: 0.1.0
-
-  pdf: # Overridden
-    path: ../../prod-crystal/pdf
-    version: 1.22.0
+  pdf:
+    git: https://github.com/aloli-crystal/pdf.git
+    version: 1.22.1
 
   pdf-a:
-    path: ../../prod-crystal/pdf-a
-    version: 0.3.0
+    git: https://github.com/aloli-crystal/pdf-a.git
+    version: 0.3.0+git.commit.d205ecd704fd75528a24d6ecf3e062c907230ea4
 
   pdf-validate:
-    path: ../../prod-crystal/pdf-validate
-    version: 0.47.0
+    git: https://github.com/aloli-crystal/pdf-validate.git
+    version: 0.47.0+git.commit.e4ceee1d62745a75b13d5e164da269d07a7fbe89
 
   pg:
     git: https://github.com/will/crystal-pg.git
-    version: 0.30.0
+    version: 0.31.0
 
   saml:
-    path: ../../prod-crystal/saml
-    version: 1.18.1.3
+    git: https://github.com/aloli-crystal/saml.git
+    version: 1.18.1.3+git.commit.d879b94f85ab1480a73cbbcc821f48d471d8f4fb
 
   stumpy_core:
     git: https://github.com/stumpycr/stumpy_core.git
@@ -110,10 +109,10 @@ shards:
     version: 5.0.1
 
   totp:
-    path: ../../prod-crystal/totp
-    version: 0.1.0
+    git: https://github.com/aloli-crystal/totp.git
+    version: 0.1.0+git.commit.f4d2cba2ce6630d6441bc85b2b06f662ab380fc2
 
   webauthn:
-    path: ../../prod-crystal/webauthn
-    version: 0.1.0
+    git: https://github.com/aloli-crystal/webauthn.git
+    version: 0.1.0+git.commit.9df38fbe65ad709096ef5455c27e5e13f49dc66e
 
