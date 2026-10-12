@@ -1,5 +1,5 @@
 name: partiduo-einvoicing
-version: 0.1.0
+version: 0.1.1
 
 description: |
   Extension EINV de Partiduo : facturation électronique (réforme française
@@ -28,10 +28,10 @@ dependencies:
   partiduo-document:
     path: ../partiduo-document
   marten:
-    path: ../../marten
+    path: ../../prod-crystal/marten
   # Lecture des fichiers embarqués d'un PDF/A-3 Factur-X.
   pdf:
-    path: ../../pdf
+    path: ../../prod-crystal/pdf
 
 development_dependencies:
   # L'interface qui monte ui/bulma/ : nécessaire aux specs et à manage.cr ;

@@ -6,7 +6,7 @@ shards:
     version: 1.7.0
 
   authn:
-    path: ../../authn
+    path: ../../prod-crystal/authn
     version: 0.3.0
 
   bcrypt:
@@ -34,7 +34,7 @@ shards:
     version: 0.2.2
 
   jose: # Overridden
-    path: ../../jose
+    path: ../../prod-crystal/jose
     version: 0.2.0
 
   jwt:
@@ -42,7 +42,7 @@ shards:
     version: 1.7.2
 
   marten: # Overridden
-    path: ../../marten
+    path: ../../prod-crystal/marten
     version: 0.7.0
 
   marten_auth:
@@ -74,19 +74,19 @@ shards:
     version: 0.1.0
 
   password-policy: # Overridden
-    path: ../../password-policy
+    path: ../../prod-crystal/password-policy
     version: 0.1.0
 
   pdf: # Overridden
-    path: ../../pdf
+    path: ../../prod-crystal/pdf
     version: 1.22.0
 
   pdf-a:
-    path: ../../pdf-a
+    path: ../../prod-crystal/pdf-a
     version: 0.3.0
 
   pdf-validate:
-    path: ../../pdf-validate
+    path: ../../prod-crystal/pdf-validate
     version: 0.47.0
 
   pg:
@@ -94,7 +94,7 @@ shards:
     version: 0.30.0
 
   saml:
-    path: ../../saml
+    path: ../../prod-crystal/saml
     version: 1.18.1.3
 
   stumpy_core:
@@ -110,10 +110,10 @@ shards:
     version: 5.0.1
 
   totp:
-    path: ../../totp
+    path: ../../prod-crystal/totp
     version: 0.1.0
 
   webauthn:
-    path: ../../webauthn
+    path: ../../prod-crystal/webauthn
     version: 0.1.0
 

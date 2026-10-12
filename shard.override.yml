@@ -9,10 +9,10 @@ dependencies:
   partiduo-ui-bulma:
     path: ../partiduo-ui-bulma
   marten:
-    path: ../../marten
+    path: ../../prod-crystal/marten
   password-policy:
-    path: ../../password-policy
+    path: ../../prod-crystal/password-policy
   jose:
-    path: ../../jose
+    path: ../../prod-crystal/jose
   pdf:
-    path: ../../pdf
+    path: ../../prod-crystal/pdf

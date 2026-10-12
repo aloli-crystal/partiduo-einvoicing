@@ -3,7 +3,7 @@
 #
 # shard.yml référence le cœur (`../partiduo-app`), DOCUMENT
 # (`../partiduo-document`), l'interface (`../partiduo-ui-bulma`) et les
-# shards maison (`../../<nom>`) en `path:` tant qu'ils ne sont pas publiés.
+# shards maison (`../../prod-crystal/<nom>`) en `path:` tant qu'ils ne sont pas publiés.
 # En CI, on les clone à ces emplacements.
 set -eu
 
@@ -12,7 +12,7 @@ base="${PARTIDUO_DEPS_BASE_URL:-https://github.com/aloli-crystal}"
 
 for repo in partiduo-app partiduo-document partiduo-ui-bulma; do
   if [ ! -d "../$repo" ]; then
-    git clone --depth 1 --branch "${PARTIDUO_APP_BRANCH:-development}" "$base/$repo.git" "../$repo"
+    git clone --depth 1 --branch "${PARTIDUO_APP_BRANCH:-development}" "${PARTIDUO_REPOS_BASE_URL:-https://github.com/aloli-partiduo}/$repo.git" "../$repo"
   fi
 done
 
